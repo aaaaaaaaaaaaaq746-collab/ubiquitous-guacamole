@@ -954,35 +954,149 @@ Built with ❤️ — not affiliated with Microsoft.
     }
   }
 
-  // --- Search ---
+  // --- Search — Subpart 2.1: full functional Search & Replace ---
   const searchInput = document.getElementById('searchInput');
   const searchResults = document.getElementById('searchResults');
-  if (searchInput) {
-    searchInput.addEventListener('input', () => {
-      const q = searchInput.value.trim().toLowerCase();
-      if (!q) { searchResults.innerHTML = '<div class="muted">Type to search across files</div>'; return; }
-      const files = getAllFiles();
-      let html = '';
-      let count = 0;
-      for (const f of files) {
-        if (f.content.toLowerCase().includes(q)) {
-          const lines = f.content.split('\n');
-          const matches = [];
-          lines.forEach((line, idx) => {
-            if (line.toLowerCase().includes(q)) matches.push({ idx: idx+1, text: line.trim().slice(0,80) });
-          });
-          if (matches.length) {
-            count += matches.length;
-            html += `<div class="search-result-group">${f.path} • ${matches.length}</div>`;
-            for (const m of matches.slice(0,3)) {
-              html += `<div class="search-result-item" data-path="${f.path}" data-line="${m.idx}">${m.idx}: ${escapeHtml(m.text)}</div>`;
-            }
-          }
+  const replaceInput = document.getElementById('replaceInput');
+  const searchInclude = document.getElementById('searchInclude');
+  const searchCase = document.getElementById('searchCase');
+  const searchWord = document.getElementById('searchWord');
+  const searchRegex = document.getElementById('searchRegex');
+  const searchBtn = document.getElementById('searchBtn');
+  const searchClearBtn = document.getElementById('searchClearBtn');
+  const replaceOneBtn = document.getElementById('replaceOneBtn');
+  const replaceAllBtn = document.getElementById('replaceAllBtn');
+  let lastSearchMatches = []; // for replace one-by-one
+
+  function globToRegExp(glob) {
+    if (!glob) return null;
+    // very simple: support **, *, ?
+    const esc = glob.replace(/[.+^${}()|[\]\\]/g,'\\$&').replace(/\*\*/g,'.*').replace(/\*/g,'[^/]*').replace(/\?/g,'.');
+    return new RegExp('^' + esc + '$', 'i');
+  }
+  function shouldInclude(path, includeGlob) {
+    if (!includeGlob) return true;
+    const pat = globToRegExp(includeGlob.trim());
+    if (!pat) return true;
+    return pat.test(path) || path.includes(includeGlob.trim());
+  }
+  function buildSearchRegex(q) {
+    if (!q) return null;
+    const flags = searchCase?.checked ? 'g' : 'gi';
+    try {
+      if (searchRegex?.checked) return new RegExp(q, flags);
+      const esc = q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+      const pat = searchWord?.checked ? `\\b${esc}\\b` : esc;
+      return new RegExp(pat, flags);
+    } catch (e) { toast('Invalid regex: '+e.message); return null; }
+  }
+  function runSearch() {
+    const q = searchInput.value;
+    if (!q.trim()) { searchResults.innerHTML = '<div class="muted">Enter a search term. Use toggles for Case/Word/Regex and Include filter.</div>'; lastSearchMatches=[]; return; }
+    const regex = buildSearchRegex(q);
+    if (!regex) return;
+    const include = searchInclude?.value.trim();
+    const files = getAllFiles();
+    let html = '', total=0, fileCount=0;
+    lastSearchMatches = [];
+    for (const f of files) {
+      if (!shouldInclude(f.path, include)) continue;
+      const lines = f.content.split('\n');
+      const matches = [];
+      lines.forEach((line, idx)=>{
+        const m = line.match(regex);
+        if (m) {
+          // find all occurrences in line
+          let lineMatches = [...line.matchAll(new RegExp(regex.source, regex.flags.includes('g')?regex.flags:regex.flags+'g'))];
+          matches.push({idx: idx+1, text: line.trim().slice(0,90), count: lineMatches.length, lineText: line});
+          lastSearchMatches.push({path:f.path, line: idx+1, text: line, matches: lineMatches});
         }
+      });
+      if (matches.length) {
+        fileCount++; total+=matches.length;
+        html += `<div class="search-result-group">${f.path} • ${matches.length} <button class="ghost-btn small" data-replace-file="${f.path}" style="margin-left:6px">Replace in file</button></div>`;
+        for (const m of matches.slice(0,5)) {
+          // highlight match
+          let highlighted = escapeHtml(m.text);
+          try { highlighted = highlighted.replace(regex, '<mark>$&</mark>'); } catch{}
+          html += `<div class="search-result-item" data-path="${f.path}" data-line="${m.idx}"><span style="color:var(--fg-muted); font-size:11px">${m.idx}:</span> ${highlighted} <span class="muted small">×${m.count}</span></div>`;
+        }
+        if (matches.length>5) html += `<div class="muted small" style="padding-left:12px">+${matches.length-5} more in this file…</div>`;
       }
-      if (!html) html = `<div class="muted">No results for "${escapeHtml(q)}"</div>`;
-      else html = `<div class="muted">${count} results in ${files.length} files</div>` + html;
-      searchResults.innerHTML = html;
+    }
+    if (!html) html = `<div class="muted">No results for "${escapeHtml(q)}" ${include?`in "${include}"`:''}</div>`;
+    else html = `<div class="muted" style="display:flex; justify-content:space-between; align-items:center"><span>${total} results in ${fileCount} files</span><button class="ghost-btn small" id="replaceAllInResults">Replace All (${total})</button></div>` + html;
+    searchResults.innerHTML = html;
+    // wire replace in file buttons
+    searchResults.querySelectorAll('[data-replace-file]').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        const path=b.dataset.replaceFile;
+        const node=findNode(path);
+        if(!node) return;
+        const q2=searchInput.value, r=replaceInput.value;
+        const rx=buildSearchRegex(q2);
+        if(!rx) return;
+        const before=node.content;
+        node.content = node.content.replace(new RegExp(rx.source, rx.flags.includes('g')?rx.flags:rx.flags+'g'), r);
+        if(node.content!==before){ node.content!==before && (openTabs.find(t=>t.path===path).dirty=true, renderTabs()); saveFS(); runSearch(); toast(`Replaced in ${path}`); }
+      });
+    });
+    document.getElementById('replaceAllInResults')?.addEventListener('click', doReplaceAll);
+  }
+  function doReplaceOne(){
+    if (!lastSearchMatches.length) { toast('No match to replace — run Search first'); return; }
+    const first = lastSearchMatches[0];
+    const node=findNode(first.path);
+    const q=searchInput.value, r=replaceInput.value;
+    const rx=buildSearchRegex(q);
+    if(!rx) return;
+    // replace first occurrence on that line only
+    const lines=node.content.split('\n');
+    const lineIdx=first.line-1;
+    const line=lines[lineIdx];
+    // replace only first match
+    const newLine = line.replace(rx, r);
+    if(newLine!==line){ lines[lineIdx]=newLine; node.content=lines.join('\n'); const tab=openTabs.find(t=>t.path===first.path); if(tab) tab.dirty=true; renderTabs(); saveFS(); toast(`Replaced 1 in ${first.path}:${first.line}`); runSearch(); openFile(first.path); setTimeout(()=>{ if(monacoEditor) { monacoEditor.revealLineInCenter(first.line); monacoEditor.setSelection({startLineNumber:first.line, startColumn:1, endLineNumber:first.line, endColumn: newLine.length+1}); }},100); }
+  }
+  function doReplaceAll(){
+    const q=searchInput.value, r=replaceInput.value;
+    if(!q){ toast('Enter search term'); return; }
+    const rx=buildSearchRegex(q);
+    if(!rx) return;
+    const include=searchInclude?.value.trim();
+    let changed=0, filesChanged=0;
+    for(const f of getAllFiles()){
+      if(!shouldInclude(f.path, include)) continue;
+      const matches = [...f.content.matchAll(new RegExp(rx.source, rx.flags.includes('g')?rx.flags:rx.flags+'g'))];
+      if(matches.length){
+        f.content = f.content.replace(new RegExp(rx.source, rx.flags.includes('g')?rx.flags:rx.flags+'g'), r);
+        const tab=openTabs.find(t=>t.path===f.path); if(tab) tab.dirty=true;
+        changed+=matches.length; filesChanged++;
+      }
+    }
+    if(changed){ saveFS(); renderTree(); renderTabs(); runSearch(); toast(`Replaced ${changed} occurrences in ${filesChanged} files`); if(activePath && monacoEditor) monacoEditor.setValue(findNode(activePath).content); }
+    else toast('No occurrences to replace');
+  }
+  if (searchInput) {
+    searchInput.addEventListener('input', runSearch);
+    searchBtn?.addEventListener('click', runSearch);
+    searchClearBtn?.addEventListener('click', ()=>{ searchInput.value=''; replaceInput.value=''; searchInclude.value=''; searchResults.innerHTML='<div class="muted">Cleared</div>'; lastSearchMatches=[]; });
+    replaceOneBtn?.addEventListener('click', doReplaceOne);
+    replaceAllBtn?.addEventListener('click', doReplaceAll);
+    // toggles re-run
+    [searchCase, searchWord, searchRegex].forEach(el=>el?.addEventListener('change', runSearch));
+    searchInclude?.addEventListener('input', runSearch);
+    replaceInput?.addEventListener('keydown', e=>{ if(e.key==='Enter' && (e.ctrlKey||e.metaKey)) doReplaceAll(); else if(e.key==='Enter') doReplaceOne(); });
+    searchInput.addEventListener('keydown', e=>{
+      if(e.key==='Enter' && (e.ctrlKey||e.metaKey)) doReplaceAll();
+      else if(e.key==='Enter') runSearch();
+      if(e.key==='Escape'){ searchInput.value=''; runSearch(); }
+    });
+    // Replace toggle visibility
+    document.getElementById('searchReplaceToggle')?.addEventListener('click', ()=>{
+      const row=document.getElementById('replaceRow');
+      row.classList.toggle('hidden');
+      if(!row.classList.contains('hidden')) replaceInput.focus();
     });
     searchResults.addEventListener('click', (e) => {
       const item = e.target.closest('.search-result-item');
