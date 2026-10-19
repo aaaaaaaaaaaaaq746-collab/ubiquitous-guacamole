@@ -1510,8 +1510,16 @@ Built with ❤️ — not affiliated with Microsoft.
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   });
 
-  // --- Resizers ---
-  function makeResizer(handle, target, dir) {
+  // --- Resizers — Subpart 1.8: persistent ---
+  function makeResizer(handle, target, dir, lsKey) {
+    // restore size
+    if (lsKey) {
+      const saved = localStorage.getItem(lsKey);
+      if (saved) {
+        if (dir==='vertical') target.style.width = saved;
+        else target.style.height = saved;
+      }
+    }
     let start = 0, startSize = 0;
     handle.addEventListener('mousedown', (e) => {
       start = dir === 'horizontal' ? e.clientY : e.clientX;
@@ -1520,8 +1528,6 @@ Built with ❤️ — not affiliated with Microsoft.
       document.body.style.cursor = dir === 'horizontal' ? 'row-resize' : 'col-resize';
       const onMove = (ev) => {
         const cur = dir === 'horizontal' ? ev.clientY : ev.clientX;
-        const delta = dir === 'horizontal' ? start - cur : cur - start;
-        // for sidebar, delta positive increases width when dragging right; for panel, dragging up increases height
         if (target === sidebar) {
           const newW = Math.max(170, Math.min(600, startSize + (cur - start)));
           target.style.width = newW + 'px';
@@ -1540,23 +1546,71 @@ Built with ❤️ — not affiliated with Microsoft.
         document.body.style.userSelect = '';
         document.body.style.cursor = '';
         if (monacoEditor) monacoEditor.layout();
+        if (lsKey) {
+          if (dir==='vertical') localStorage.setItem(lsKey, target.style.width);
+          else localStorage.setItem(lsKey, target.style.height);
+        }
       };
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
     });
+    // keyboard resize via arrow keys when handle focused
+    handle.addEventListener('keydown', (e)=>{
+      const step = e.shiftKey ? 20 : 5;
+      if (dir==='vertical') {
+        if (e.key==='ArrowLeft') { e.preventDefault(); target.style.width = Math.max(170, target.offsetWidth - step) + 'px'; if(lsKey) localStorage.setItem(lsKey, target.style.width); }
+        if (e.key==='ArrowRight') { e.preventDefault(); target.style.width = Math.min(600, target.offsetWidth + step) + 'px'; if(lsKey) localStorage.setItem(lsKey, target.style.width); }
+      }
+    });
   }
-  makeResizer(document.querySelector('[data-resize="sidebar"]'), sidebar, 'vertical');
-  makeResizer(document.querySelector('[data-resize="panel"]'), panel, 'horizontal');
-  makeResizer(document.querySelector('[data-resize="aux"]'), auxiliaryBar, 'vertical');
+  makeResizer(document.querySelector('[data-resize="sidebar"]'), sidebar, 'vertical', 'vscode-sidebar-width');
+  makeResizer(document.querySelector('[data-resize="panel"]'), panel, 'horizontal', 'vscode-panel-height');
+  makeResizer(document.querySelector('[data-resize="aux"]'), auxiliaryBar, 'vertical', 'vscode-aux-width');
 
-  // --- Welcome actions ---
+  // --- Welcome actions — Subpart 1.8 ---
   document.querySelectorAll('[data-cmd="newFile"]').forEach(b=>b.addEventListener('click', () => createNew('file','')));
   document.querySelectorAll('[data-cmd="openFolder"]').forEach(b=>b.addEventListener('click', () => toast('Folder picker — in a real app this would show system dialog. Use Explorer to create files.')));
   document.querySelectorAll('[data-open]').forEach(a=>a.addEventListener('click', (e)=>{ e.preventDefault(); openFile(a.dataset.open); }));
-  document.querySelectorAll('[data-cmd="split"]').forEach(b=>b.addEventListener('click', ()=>toast('Split editor — open another file to compare side by side (demo)')));
+  document.querySelectorAll('[data-cmd="split"]').forEach(b=>b.addEventListener('click', ()=>{ // split editor — real implementation in Part 2, now functional
+    const groups = document.querySelectorAll('.editor-group');
+    const second = document.querySelector('[data-group="1"]');
+    if (second.classList.contains('hidden')) { second.classList.remove('hidden'); if(monacoEditor && !window.monaco2) { // init second editor
+      if (isMonacoReady) { window.monaco2 = monaco.editor.create(document.getElementById('monacoContainer2'), { value: '// Split group — open another file here', language:'javascript', theme: getEditorSettings().theme==='light'?'vs':'vs-dark', automaticLayout:true, fontSize: getEditorSettings().fontSize, minimap:{enabled:getEditorSettings().minimap}, wordWrap:getEditorSettings().wordWrap, tabSize:getEditorSettings().tabSize }); }
+    } toast('Split Right — second group visible'); } else { second.classList.add('hidden'); toast('Split closed'); }
+  }));
+  document.querySelectorAll('[data-cmd="splitDown"]').forEach(b=>b.addEventListener('click', ()=>toast('Split Down — use Split Right for now'))); 
   document.querySelectorAll('[data-cmd="closePreview"]').forEach(b=>b.addEventListener('click', ()=>{ previewPane.classList.add('hidden'); if(activePath) showEditor(); }));
   document.querySelectorAll('[data-cmd="newFolder"]').forEach(b=>b.addEventListener('click', ()=>createNew('folder','')));
-  document.querySelectorAll('[data-cmd="newTerminal"]').forEach(b=>b.addEventListener('click', ()=>{ terminalLog('New terminal created'); terminalInput.focus(); }));
+  document.querySelectorAll('[data-cmd="newTerminal"]').forEach(b=>b.addEventListener('click', ()=>{ terminalLog('New terminal created'); terminalInput.focus(); pushNotification('Terminal','New terminal instance'); }));
+  // Welcome checkbox persistence
+  const welcomeCheck = document.getElementById('showWelcomeCheck');
+  if (welcomeCheck) {
+    welcomeCheck.checked = localStorage.getItem('vscode-welcome')!=='off';
+    welcomeCheck.addEventListener('change', ()=>localStorage.setItem('vscode-welcome', welcomeCheck.checked?'on':'off'));
+    // respect on load
+    if (localStorage.getItem('vscode-welcome')==='off') { // skip welcome, open last file
+      const last = recent[0];
+      if (last) setTimeout(()=>openFile(last), 300);
+    }
+  }
+  document.getElementById('checkUpdates')?.addEventListener('click', (e)=>{ e.preventDefault(); toast('Checking for updates...'); setTimeout(()=>toast('You are up to date — v1.104.0'), 800); pushNotification('Update','VS Code Web is up to date'); });
+  document.querySelectorAll('[data-cmd="showPalette"]').forEach(b=>b.addEventListener('click', ()=>openPalette('>')));
+  document.querySelector('[data-cmd="toggleDebug"]')?.addEventListener('click', (e)=>{ e.preventDefault(); switchView('debug'); });
+  // Global keyboard: Ctrl+N/O/G, Esc handling for modals, zen exit
+  document.addEventListener('keydown', (e)=>{
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && e.key.toLowerCase()==='n' && !e.shiftKey) { e.preventDefault(); createNew('file',''); }
+    else if (mod && e.key.toLowerCase()==='o') { e.preventDefault(); openPalette(''); }
+    else if (mod && e.key.toLowerCase()==='g' && !e.shiftKey) { e.preventDefault(); openGotoLine(); }
+    else if (e.key==='Escape') {
+      // close modals in order
+      if (!document.getElementById('findWidget').classList.contains('hidden')) { document.getElementById('findWidget').classList.add('hidden'); }
+      else if (!document.getElementById('settingsOverlay').classList.contains('hidden')) { document.getElementById('settingsOverlay').classList.add('hidden'); }
+      else if (!document.getElementById('pickerOverlay').classList.contains('hidden')) { document.getElementById('pickerOverlay').classList.add('hidden'); }
+      else if (!document.getElementById('notificationsPanel').classList.contains('hidden') && e.target.closest('.notifications')==null) { /* keep */ }
+      else if (document.body.classList.contains('zen-mode')) { document.body.classList.remove('zen-mode'); toast('Exited Zen Mode'); }
+    }
+  });
   document.querySelectorAll('[data-cmd="refresh"]').forEach(b=>b.addEventListener('click', ()=>{ renderTree(); toast('Explorer refreshed'); }));
   document.querySelectorAll('[data-cmd="commit"]').forEach(b=>b.addEventListener('click', ()=>toast('Committed to main — 2 files changed (demo)')));
 
@@ -1877,6 +1931,68 @@ Built with ❤️ — not affiliated with Microsoft.
     t.textContent = msg;
     toastContainer.appendChild(t);
     setTimeout(()=>{ t.style.opacity='0'; t.style.transition='opacity 0.3s'; setTimeout(()=>t.remove(),300); }, ms);
+    // also push to notifications (1.8)
+    pushNotification('Info', msg);
+  }
+  function pushNotification(title, msg) {
+    const list = document.getElementById('notificationsList');
+    if (!list) return;
+    // remove empty placeholder
+    if (list.textContent.includes('No notifications')) list.innerHTML='';
+    const item = document.createElement('div');
+    item.className = 'notif-item';
+    item.innerHTML = `<strong>${title}</strong><span>${msg}</span><small class="muted small" style="display:block; margin-top:4px">${new Date().toLocaleTimeString()}</small>`;
+    list.prepend(item);
+    const badge = document.getElementById('notifBadge');
+    if (badge) { badge.textContent = String(list.children.length); badge.classList.remove('hidden'); }
+    // keep last 20
+    while (list.children.length>20) list.lastChild.remove();
+  }
+  // enhance goto line
+  const gotoInput = document.getElementById('gotoLineInput');
+  if (gotoInput) {
+    gotoInput.addEventListener('keydown', (e)=>{
+      if (e.key==='Enter') {
+        const val = gotoInput.value.replace(':','').trim();
+        const [line, col] = val.split(',').map(n=>parseInt(n));
+        if (monacoEditor && line) { monacoEditor.revealLineInCenter(line); monacoEditor.setPosition({lineNumber: line, column: col||1}); toast(`Go to ${line}${col?':'+col:''}`); }
+        document.getElementById('gotoLinePalette').classList.add('hidden');
+      } else if (e.key==='Escape') document.getElementById('gotoLinePalette').classList.add('hidden');
+    });
+  }
+  // Find widget wiring (1.8)
+  const findInput = document.getElementById('findInput');
+  const findCloseBtn = document.getElementById('findClose');
+  findCloseBtn?.addEventListener('click', ()=>document.getElementById('findWidget').classList.add('hidden'));
+  if (findInput) {
+    let findMatches=[], findIdx=0;
+    function runFind(){
+      const q=findInput.value;
+      if(!monacoEditor || !q) { document.getElementById('findInfo').textContent='No results'; return; }
+      // use Monaco find controller via trigger
+      monacoEditor.getAction('actions.find').run();
+      // also manual count via model
+      const model=monacoEditor.getModel();
+      if(model){ const matches=model.findMatches(q, false, !!document.getElementById('findCase').checked, !!document.getElementById('findWord').checked, document.getElementById('findRegex').checked? '.*': null, false); findMatches=matches; findIdx=0; document.getElementById('findInfo').textContent = matches.length ? `${matches.length} results` : 'No results'; if(matches.length) monacoEditor.setSelection(matches[0].range); }
+    }
+    findInput.addEventListener('input', runFind);
+    document.getElementById('findNext')?.addEventListener('click', ()=>{ if(findMatches.length){ findIdx=(findIdx+1)%findMatches.length; monacoEditor.setSelection(findMatches[findIdx].range); monacoEditor.revealLineInCenter(findMatches[findIdx].range.startLineNumber); }});
+    document.getElementById('findPrev')?.addEventListener('click', ()=>{ if(findMatches.length){ findIdx=(findIdx-1+findMatches.length)%findMatches.length; monacoEditor.setSelection(findMatches[findIdx].range); monacoEditor.revealLineInCenter(findMatches[findIdx].range.startLineNumber); }});
+    document.getElementById('replaceBtn')?.addEventListener('click', ()=>{
+      const replaceVal=document.getElementById('findReplaceInput2').value;
+      if(monacoEditor) monacoEditor.trigger('keyboard','actions.find', {searchString: findInput.value, replaceString: replaceVal, isRegex: !!document.getElementById('findRegex').checked});
+      toast('Replaced');
+    });
+    document.getElementById('replaceAllBtn2')?.addEventListener('click', ()=>{
+      const q=findInput.value, r=document.getElementById('findReplaceInput2').value;
+      if(!activePath||!q) return;
+      const node=findNode(activePath);
+      let content=node.content;
+      let regex;
+      try{ regex = document.getElementById('findRegex').checked ? new RegExp(q, 'g') : new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), document.getElementById('findCase').checked ? 'g':'gi'); } catch{ toast('Invalid regex'); return; }
+      const newContent=content.replace(regex, r);
+      node.content=newContent; if(monacoEditor) monacoEditor.setValue(newContent); const tab=openTabs.find(t=>t.path===activePath); if(tab) tab.dirty=true; renderTabs(); saveFS(); toast(`Replaced all in ${activePath}`);
+    });
   }
 
   // --- Init ---
