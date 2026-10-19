@@ -2368,6 +2368,45 @@ Built with ❤️ — not affiliated with Microsoft.
   document.getElementById('statusNotifications')?.addEventListener('click', ()=>{
     document.getElementById('notificationsPanel').classList.toggle('hidden');
   });
+  document.getElementById('statusFeedback')?.addEventListener('click', ()=>{
+    showPicker('Feedback', [{label:'Tweet Feedback 💬', desc:'Share on X'},{label:'Report Issue 🐛'},{label:'Show Release Notes 📝'}], it=>{ toast(it.label+' — thank you!'); window.open('https://github.com/aaaaaaaaaaaaaq746-collab/ubiquitous-guacamole','_blank'); });
+  });
+  document.getElementById('statusSync')?.addEventListener('click', ()=>{
+    const el=document.getElementById('statusSync');
+    el.textContent='⟳ Syncing…';
+    setTimeout(()=>{ el.textContent='↻'; toast('Settings Sync — up to date (demo)'); pushNotification('Sync','Settings synced'); },800);
+  });
+  // Selection status updates on cursor/selection change (already updated for Ln/Col, add selection)
+  function updateSelectionStatus(){
+    const selEl=document.getElementById('statusSelection');
+    if(!selEl || !monacoEditor) return;
+    if(!activePath){ selEl.textContent='No Selection'; return; }
+    const sel=monacoEditor.getSelection();
+    const model=monacoEditor.getModel();
+    if(!sel || sel.isEmpty()) selEl.textContent='No Selection';
+    else {
+      // get selected text length
+      const text=model.getValueInRange(sel);
+      const lines=sel.endLineNumber - sel.startLineNumber + 1;
+      selEl.textContent = `(${lines} line${lines>1?'s':''} selected, ${text.length} col) Col`;
+      selEl.title = `${text.length} characters selected`;
+    }
+  }
+  // hook selection update
+  setTimeout(()=>{
+    if(monacoEditor){
+      monacoEditor.onDidChangeCursorSelection(()=>{ updateEditorPosition(); updateSelectionStatus(); });
+    }
+  }, 1200);
+  document.getElementById('statusSelection')?.addEventListener('click', ()=>toast('Selection — drag in editor or Shift+click'));
+  // Ctrl+= zoom already; add notification badge auto-update hook
+  const _origPushNotif = pushNotification;
+  // ensure badge hides when 0
+  const notifBadge=document.getElementById('notifBadge');
+  if(notifBadge){
+    const obs=new MutationObserver(()=>{ const n=document.querySelectorAll('#notificationsList .notification'); if(n.length===0) notifBadge.classList.add('hidden'); });
+    obs.observe(document.getElementById('notificationsList'), {childList:true});
+  }
   // Settings modal
   function openSettings(){ document.getElementById('settingsOverlay').classList.remove('hidden'); syncSettingsUI(); }
   function closeSettings(){ document.getElementById('settingsOverlay').classList.add('hidden'); }
