@@ -1560,14 +1560,129 @@ Built with ❤️ — not affiliated with Microsoft.
   document.querySelectorAll('[data-cmd="refresh"]').forEach(b=>b.addEventListener('click', ()=>{ renderTree(); toast('Explorer refreshed'); }));
   document.querySelectorAll('[data-cmd="commit"]').forEach(b=>b.addEventListener('click', ()=>toast('Committed to main — 2 files changed (demo)')));
 
-  // --- Status bar interactions ---
-  document.getElementById('statusLanguage')?.addEventListener('click', ()=>openPalette('>language'));
-  document.getElementById('statusZoom')?.addEventListener('click', ()=>{
-    const cur = parseInt(document.body.style.zoom || '100');
-    const next = cur === 100 ? 120 : cur === 120 ? 90 : 100;
-    document.body.style.zoom = next + '%';
-    document.getElementById('statusZoom').textContent = `Zoom: ${next}%`;
+  // --- Status Bar & Settings — Subpart 1.7 (full pickers) ---
+  function showPicker(title, items, onSelect) {
+    const overlay = document.getElementById('pickerOverlay');
+    const picker = document.getElementById('picker');
+    picker.innerHTML = `<div style="padding:8px 14px; font-weight:600; border-bottom:1px solid var(--border-subtle); font-size:12px">${title}</div>` + items.map((it,i)=>`<div class="picker-item ${i===0?'is-active':''}" data-idx="${i}"><span>${it.label}</span><small>${it.desc||''}</small></div>`).join('');
+    overlay.classList.remove('hidden');
+    picker._items = items; picker._onSelect = onSelect; picker._active=0;
+    picker.querySelectorAll('.picker-item').forEach(el=>{
+      el.addEventListener('click', ()=>{ onSelect(items[parseInt(el.dataset.idx)]); overlay.classList.add('hidden'); });
+      el.addEventListener('mouseenter', ()=>{ picker.querySelectorAll('.picker-item').forEach(x=>x.classList.remove('is-active')); el.classList.add('is-active'); picker._active=parseInt(el.dataset.idx); });
+    });
+    overlay.onclick = (e)=>{ if(e.target===overlay) overlay.classList.add('hidden'); };
+    const keyHandler = (e)=>{
+      if (e.key==='Escape') { overlay.classList.add('hidden'); document.removeEventListener('keydown', keyHandler); }
+      else if (e.key==='ArrowDown') { e.preventDefault(); let a=picker._active; picker.querySelectorAll('.picker-item')[a]?.classList.remove('is-active'); a=Math.min(a+1, items.length-1); picker.querySelectorAll('.picker-item')[a].classList.add('is-active'); picker._active=a; }
+      else if (e.key==='ArrowUp') { e.preventDefault(); let a=picker._active; picker.querySelectorAll('.picker-item')[a]?.classList.remove('is-active'); a=Math.max(a-1,0); picker.querySelectorAll('.picker-item')[a].classList.add('is-active'); picker._active=a; }
+      else if (e.key==='Enter') { e.preventDefault(); const it=items[picker._active]; if(it){ onSelect(it); overlay.classList.add('hidden'); document.removeEventListener('keydown', keyHandler); } }
+    };
+    document.addEventListener('keydown', keyHandler);
+  }
+  // Language picker
+  document.getElementById('statusLanguage')?.addEventListener('click', ()=>{
+    const langs = ['javascript','typescript','html','css','json','markdown','plaintext','python','yaml','shell'].map(l=>({label:l.charAt(0).toUpperCase()+l.slice(1), desc:l, id:l}));
+    showPicker('Select Language Mode', langs, (it)=>{
+      if (!activePath) { toast('Open a file first'); return; }
+      const node=findNode(activePath);
+      // change model language
+      if (monacoEditor && monacoInstance) { const model=monacoEditor.getModel(); monaco.editor.setModelLanguage(model, it.id); }
+      document.getElementById('statusLanguage').textContent = it.label;
+      toast(`Language: ${it.label}`);
+    });
   });
+  // Encoding picker
+  document.getElementById('statusEncoding')?.addEventListener('click', ()=>{
+    showPicker('Select Encoding', [{label:'UTF-8', desc:'(default)'},{label:'UTF-16 LE'},{label:'UTF-16 BE'},{label:'Windows 1252'}].map(x=>({label:x.label, desc:x.desc||''})), it=>toast(`Encoding: ${it.label} (demo — files stay UTF-8)`));
+  });
+  // EOL picker
+  document.getElementById('statusEolStatus')?.addEventListener('click', ()=>{
+    showPicker('Select End of Line Sequence', [{label:'LF', desc:'\\n (Unix)'},{label:'CRLF', desc:'\\r\\n (Windows)'}], it=>{ document.getElementById('statusEolStatus').textContent=it.label; toast(`EOL: ${it.label}`); });
+  });
+  // Indent picker
+  document.getElementById('statusIndent')?.addEventListener('click', ()=>{
+    showPicker('Select Indentation', [{label:'Spaces: 2', id:2},{label:'Spaces: 4', id:4},{label:'Tabs', id:'tab'}], it=>{
+      document.getElementById('statusIndent').textContent=it.label;
+      if(monacoEditor) monacoEditor.updateOptions({tabSize: typeof it.id==='number'?it.id:4, insertSpaces: it.id!=='tab'});
+      localStorage.setItem('vscode-tabSize', String(it.id==='tab'?4:it.id));
+      toast(`Indentation: ${it.label}`);
+    });
+  });
+  // Position — goto line
+  document.getElementById('statusPosition')?.addEventListener('click', ()=>openGotoLine());
+  // Branch picker
+  document.getElementById('statusBranch')?.addEventListener('click', ()=>{
+    showPicker('Select Branch', [{label:'main', desc:'current'},{label:'arena/ee95291c-ubiquitous-guacamole', desc:'this PR'},{label:'Create new branch...'}], it=>{
+      if(it.label.startsWith('Create')) { const n=prompt('Branch name:'); if(n) toast(`Created branch ${n}`); } else toast(`Switched to ${it.label} (demo)`);
+      document.getElementById('statusBranch').innerHTML=it.label.split('/').pop()+' <span class="status-badge">⇅ 1</span>';
+    });
+  });
+  // Remote picker
+  document.getElementById('statusRemote')?.addEventListener('click', ()=>{
+    showPicker('Remote', [{label:'WSL: Ubuntu', desc:'Connected'},{label:'SSH: dev-server', desc:'Not connected'},{label:'Close Remote Connection'}], it=>toast(it.label));
+  });
+  // Problems picker
+  document.getElementById('statusProblems')?.addEventListener('click', ()=>{
+    switchView('search'); // actually problems is in panel, but we show problems panel
+    const panel = document.getElementById('panel'); panel.classList.remove('hidden');
+    document.querySelectorAll('.panel-tab').forEach(t=>t.classList.remove('is-active'));
+    document.querySelector('[data-panel="problems"]')?.classList.add('is-active');
+    document.querySelectorAll('.panel-view').forEach(v=>v.classList.remove('is-active'));
+    document.querySelector('[data-panel-view="problems"]')?.classList.add('is-active');
+    toast('Problems — 2 errors, 5 warnings');
+  });
+  // Zoom
+  document.getElementById('statusZoom')?.addEventListener('click', ()=>{
+    showPicker('Zoom', [{label:'Zoom: 80%', z:80},{label:'Zoom: 90%', z:90},{label:'Zoom: 100%', z:100},{label:'Zoom: 120%', z:120},{label:'Zoom: 150%', z:150}], it=>{
+      document.body.style.zoom=it.z+'%';
+      document.getElementById('statusZoom').textContent=`Zoom: ${it.z}%`;
+      toast(`Zoom ${it.z}%`);
+    });
+  });
+  // Notifications bell
+  document.getElementById('statusNotifications')?.addEventListener('click', ()=>{
+    document.getElementById('notificationsPanel').classList.toggle('hidden');
+  });
+  // Settings modal
+  function openSettings(){ document.getElementById('settingsOverlay').classList.remove('hidden'); syncSettingsUI(); }
+  function closeSettings(){ document.getElementById('settingsOverlay').classList.add('hidden'); }
+  function syncSettingsUI(){
+    const s=getEditorSettings();
+    document.getElementById('settingTheme').value = s.theme;
+    document.getElementById('settingFontSize').value = s.fontSize;
+    document.getElementById('settingTabSize').value = s.tabSize;
+    document.getElementById('settingWordWrap').checked = s.wordWrap==='on';
+    document.getElementById('settingMinimap').checked = s.minimap;
+    document.getElementById('settingAutoSave').checked = localStorage.getItem('vscode-autoSave')==='on';
+    document.getElementById('settingWelcome').checked = localStorage.getItem('vscode-welcome')!=='off';
+  }
+  document.querySelectorAll('[data-cmd="openSettings"]').forEach(b=>b.addEventListener('click', openSettings));
+  document.querySelectorAll('[data-close="settings"]').forEach(b=>b.addEventListener('click', closeSettings));
+  document.getElementById('settingsOverlay')?.addEventListener('click', (e)=>{ if(e.target===e.currentTarget) closeSettings(); });
+  // Settings live apply
+  ['settingTheme','settingFontSize','settingTabSize','settingWordWrap','settingMinimap'].forEach(id=>{
+    document.getElementById(id)?.addEventListener('change', (e)=>{
+      const v=e.target.value;
+      const chk=e.target.checked;
+      if(id==='settingTheme'){ localStorage.setItem('vscode-theme', v); document.documentElement.setAttribute('data-theme', v==='light'?'light':'dark'); if(monacoInstance) monaco.editor.setTheme(v==='light'?'vs':'vs-dark'); toast(`Theme: ${v}`); }
+      else if(id==='settingFontSize'){ localStorage.setItem('vscode-fontSize', v); if(monacoEditor) monacoEditor.updateOptions({fontSize:parseInt(v)}); }
+      else if(id==='settingTabSize'){ localStorage.setItem('vscode-tabSize', v); if(monacoEditor) monacoEditor.updateOptions({tabSize:parseInt(v)}); document.getElementById('statusIndent').textContent=`Spaces: ${v}`; }
+      else if(id==='settingWordWrap'){ localStorage.setItem('vscode-wordwrap', chk?'on':'off'); if(monacoEditor) monacoEditor.updateOptions({wordWrap: chk?'on':'off'}); }
+      else if(id==='settingMinimap'){ localStorage.setItem('vscode-minimap', chk?'on':'off'); if(monacoEditor) monacoEditor.updateOptions({minimap:{enabled:chk}}); }
+    });
+  });
+  document.getElementById('settingAutoSave')?.addEventListener('change', e=>{ localStorage.setItem('vscode-autoSave', e.target.checked?'on':'off'); toast('Auto Save '+(e.target.checked?'On':'Off')); });
+  document.getElementById('settingWelcome')?.addEventListener('change', e=>{ localStorage.setItem('vscode-welcome', e.target.checked?'on':'off'); });
+  document.getElementById('resetSettingsBtn')?.addEventListener('click', ()=>{ localStorage.removeItem('vscode-fontSize'); localStorage.removeItem('vscode-tabSize'); localStorage.removeItem('vscode-wordwrap'); localStorage.removeItem('vscode-minimap'); localStorage.removeItem('vscode-theme'); location.reload(); });
+  document.querySelectorAll('.settings-nav').forEach(b=>b.addEventListener('click', ()=>{
+    document.querySelectorAll('.settings-nav').forEach(x=>x.classList.remove('is-active')); b.classList.add('is-active'); toast(`Settings: ${b.textContent}`);
+  }));
+  // Close notifications
+  document.getElementById('closeNotificationsBtn')?.addEventListener('click', ()=>document.getElementById('notificationsPanel').classList.add('hidden'));
+  document.getElementById('clearNotificationsBtn')?.addEventListener('click', ()=>{ document.getElementById('notificationsList').innerHTML='<div class="muted small" style="padding:12px">No notifications</div>'; document.getElementById('notifBadge').classList.add('hidden'); });
+  // Ctrl+, to open settings
+  document.addEventListener('keydown', (e)=>{ if((e.ctrlKey||e.metaKey) && e.key===','){ e.preventDefault(); openSettings(); } });
 
   // --- Titlebar: Full menus (Subpart 1.1) ---
   const titleMenus = {
