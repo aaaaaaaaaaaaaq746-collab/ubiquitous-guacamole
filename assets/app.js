@@ -1814,27 +1814,68 @@ Built with ❤️ — not affiliated with Microsoft.
     if(out.length===0) out.push('(python executed — no print output)');
     return out;
   }
+  function findFileSmart(input){
+    // try direct resolve, then search all files by exact path or basename
+    let p = resolvePath(input);
+    let n = findNode(p);
+    if(n && n.type==='file') return {node:n, path:p};
+    // strip ./ prefix
+    if(input.startsWith('./')) { n=findNode(resolvePath(input.slice(2))); if(n) return {node:n, path:resolvePath(input.slice(2))}; }
+    // search by basename anywhere
+    let all=getAllFiles();
+    let base=input.split('/').pop();
+    let cand=all.find(f=> f.path===input || f.name===base || f.path.endsWith('/'+base) || f.path===base);
+    if(cand) return {node:cand, path:cand.path};
+    // case insensitive
+    cand=all.find(f=> f.name.toLowerCase()===base.toLowerCase());
+    if(cand) return {node:cand, path:cand.path};
+    return {node:null, path:p};
+  }
   function doCompile(args, compiler){
-    let src=null, out='a.out';
+    let src=null, out='a.out', hasO=false;
     for(let i=0;i<args.length;i++){
       let a=args[i];
-      if(a==='-o' && args[i+1]){ out=args[i+1]; i++; continue; }
+      if(a==='-o' && args[i+1]){ out=args[i+1]; hasO=true; i++; continue; }
       if(a.endsWith('.cpp')||a.endsWith('.c')||a.endsWith('.cc')||a.endsWith('.cxx')||a.endsWith('.C')){
         src=a;
       }
     }
-    if(!src){ terminalLog(`${compiler}: fatal error: no input files — try: ${compiler} main.cpp -o main`); return; }
-    let srcPath=resolvePath(src);
-    let node=findNode(srcPath);
-    if(!node){ terminalLog(`${compiler}: ${src}: No such file or directory`); return; }
-    terminalLog(`[${compiler}] compiling ${src} → ${out} ...`);
-    if(!node.content.includes('main')) terminalLog(`warning: no 'main' in ${src} — compiled anyway`);
+    if(!src){
+      // allow `g++ ankit.cpp` where ankit.cpp might be without extension typo? try first arg as file
+      if(args[0] && !args[0].startsWith('-')) src=args[0];
+    }
+    if(!src){ terminalLog(`${compiler}: fatal error: no input files — try: ${compiler} ankit.cpp -o ankit`); return; }
+    let found=findFileSmart(src);
+    let node=found.node, srcPath=found.path;
+    if(!node || node.type!=='file'){
+      terminalLog(`${compiler}: ${src}: No such file or directory (cwd: ${cwd||'/'} → tried ${resolvePath(src)})`);
+      let avail=getAllFiles().filter(f=>f.name.endsWith('.cpp')||f.name.endsWith('.c')).map(f=>f.path).join(', ');
+      terminalLog(avail ? `hint: .cpp/.c files: ${avail}` : 'hint: create a file first — Explorer → New File → ankit.cpp');
+      if(allFilesHint()) terminalLog('tip: use ls to see files, ls src to see src folder');
+      return;
+    }
+    terminalLog(`[${compiler}] compiling ${srcPath} → ${out} ...`);
+    if(!node.content.includes('main')) terminalLog(`warning: no 'main' in ${srcPath} — compiled anyway`);
+    // allow .cpp compiled with gcc and vice versa — still simulate
     compiledBinaries[out]=srcPath;
     compiledBinaries['./'+out]=srcPath;
     let base=out.split('/').pop();
     compiledBinaries[base]=srcPath;
     if(out==='a.out') compiledBinaries['a.out']=srcPath;
-    terminalLog(`✔ built ${out} from ${srcPath} — run with ./${out}`);
+    terminalLog(`✔ built ${out} from ${srcPath}`);
+    // auto-run so single command shows output (user expectation)
+    terminalLog(`▶ running ${out} ...`);
+    try{
+      let outputs=[];
+      if(srcPath.endsWith('.cpp')||srcPath.endsWith('.cc')||srcPath.endsWith('.cxx')) outputs=simulateCppOutput(node.content);
+      else if(srcPath.endsWith('.c')) outputs=simulateCOutput(node.content);
+      else if(srcPath.endsWith('.py')) outputs=simulatePythonOutput(node.content);
+      outputs.forEach(l=>terminalLog(l));
+      terminalLog(`[exit 0] — also run later with ./${out}`);
+    }catch(e){ terminalLog('runtime error: '+e.message); }
+  }
+  function allFilesHint(){
+    try{ return getAllFiles().length>0; }catch{return false;}
   }
   function doRunBinary(raw){
     let parts=raw.trim().split(/\s+/);
