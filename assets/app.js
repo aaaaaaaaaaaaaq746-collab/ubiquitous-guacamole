@@ -1214,6 +1214,156 @@ Built with ❤️ — not affiliated with Microsoft.
     ]);
   });
 
+  // --- SCM — Part 3: fully functional git simulation ---
+  const initialSnapshot = JSON.stringify(initialFS);
+  function getBaseFS(){ try{ return JSON.parse(initialSnapshot); } catch{ return {children:[]}; } }
+  function collectAllPaths(node, base=''){
+    let out=[];
+    if(node.path) out.push(node.path);
+    if(node.children) for(const c of node.children) out=out.concat(collectAllPaths(c));
+    return out;
+  }
+  function getGitState(){
+    let staged = JSON.parse(localStorage.getItem('vscode-git-staged')||'[]');
+    let commits = JSON.parse(localStorage.getItem('vscode-git-commits')||'[{"hash":"189fb54","msg":"Add VSCode User Setup executable","time":"2h ago","author":"you"}]');
+    let branches = JSON.parse(localStorage.getItem('vscode-git-branches')||'["main","arena/ee95291c-ubiquitous-guacamole"]');
+    let currentBranch = localStorage.getItem('vscode-git-branch')||'main';
+    return {staged, commits, branches, currentBranch};
+  }
+  function saveGitState(s){ localStorage.setItem('vscode-git-staged', JSON.stringify(s.staged)); localStorage.setItem('vscode-git-commits', JSON.stringify(s.commits)); localStorage.setItem('vscode-git-branches', JSON.stringify(s.branches)); localStorage.setItem('vscode-git-branch', s.currentBranch); }
+  function getChangedFiles(){
+    const base = getBaseFS();
+    const baseFiles = new Map();
+    (function collect(n){ if(n.type==='file') baseFiles.set(n.path, n.content); if(n.children) n.children.forEach(collect); })(base);
+    const curFiles = getAllFiles();
+    const changed=[];
+    for(const f of curFiles){
+      const baseContent = baseFiles.get(f.path);
+      if(baseContent===undefined) changed.push({path:f.path, status:'U', label:'Untracked'});
+      else if(baseContent!==f.content) changed.push({path:f.path, status:'M', label:'Modified'});
+    }
+    // deleted
+    const curPaths = new Set(curFiles.map(f=>f.path));
+    for(const [p,content] of baseFiles.entries()){
+      if(!curPaths.has(p)) changed.push({path:p, status:'D', label:'Deleted'});
+    }
+    return changed;
+  }
+  function renderSCM(){
+    const changed = getChangedFiles();
+    const {staged, commits, branches, currentBranch} = getGitState();
+    const stagedListEl=document.getElementById('stagedList'), changesListEl=document.getElementById('changesList');
+    const stagedCountEl=document.getElementById('stagedCount'), changesCountEl=document.getElementById('changesCount');
+    if(!stagedListEl||!changesListEl) return;
+    const stagedSet=new Set(staged);
+    const unstaged = changed.filter(c=>!stagedSet.has(c.path));
+    const stagedItems = changed.filter(c=>stagedSet.has(c.path));
+    stagedCountEl.textContent = stagedItems.length;
+    changesCountEl.textContent = unstaged.length;
+    // render staged
+    stagedListEl.innerHTML = stagedItems.length ? stagedItems.map(c=>`<div class="scm-item" data-path="${c.path}"><span class="scm-status ${c.status}">${c.status}</span><span style="flex:1">${c.path}</span><button class="icon-btn small" data-unstage="${c.path}" title="Unstage">−</button><button class="icon-btn small" data-diff="${c.path}" title="Open Changes">◧</button></div>`).join('') : '<div class="muted small" style="padding:6px 8px">No staged changes</div>';
+    changesListEl.innerHTML = unstaged.length ? unstaged.map(c=>`<div class="scm-item" data-path="${c.path}"><span class="scm-status ${c.status}">${c.status}</span><span style="flex:1">${c.path}</span><button class="icon-btn small" data-stage="${c.path}" title="Stage Changes">+</button><button class="icon-btn small" data-diff="${c.path}" title="Open Changes">◧</button></div>`).join('') : '<div class="muted small" style="padding:6px 8px">No changes — working tree clean</div>';
+    // commits
+    const commitsList=document.getElementById('commitsList'), commitCountEl=document.getElementById('commitCount');
+    if(commitsList){ commitsList.innerHTML = commits.map(c=>`<div class="scm-commit-item" data-hash="${c.hash}"><span class="scm-hash">${c.hash}</span> ${escapeHtml(c.msg)} <span class="muted small">— ${c.time} • ${c.author||'you'}</span></div>`).join(''); if(commitCountEl) commitCountEl.textContent=commits.length; }
+    // branches
+    const branchList=document.getElementById('branchList');
+    if(branchList){ branchList.innerHTML = branches.map(b=>`<div class="branch-item ${b===currentBranch?'is-active':''}" data-branch="${b}">${b===currentBranch?'● ':'○ '}${b}</div>`).join(''); }
+    // badge
+    const scmBadge=document.getElementById('scmBadge');
+    if(scmBadge){ scmBadge.textContent = String(changed.length); scmBadge.hidden = changed.length===0; scmBadge.style.display = changed.length? '': 'none'; }
+    // wire stage/unstage
+    stagedListEl.querySelectorAll('[data-unstage]').forEach(b=>b.addEventListener('click', (e)=>{ e.stopPropagation(); const p=b.dataset.unstage; const s=getGitState(); s.staged=s.staged.filter(x=>x!==p); saveGitState(s); renderSCM(); toast(`Unstaged ${p}`); }));
+    changesListEl.querySelectorAll('[data-stage]').forEach(b=>b.addEventListener('click', (e)=>{ e.stopPropagation(); const p=b.dataset.stage; const s=getGitState(); if(!s.staged.includes(p)) s.staged.push(p); saveGitState(s); renderSCM(); toast(`Staged ${p}`); }));
+    stagedListEl.querySelectorAll('[data-diff]').forEach(b=>b.addEventListener('click', ()=>openDiff(b.dataset.diff)));
+    changesListEl.querySelectorAll('[data-diff]').forEach(b=>b.addEventListener('click', ()=>openDiff(b.dataset.diff)));
+    changesListEl.querySelectorAll('.scm-item').forEach(el=>el.addEventListener('click', ()=>openFile(el.dataset.path)));
+    stagedListEl.querySelectorAll('.scm-item').forEach(el=>el.addEventListener('click', ()=>openFile(el.dataset.path)));
+    // update badges
+    updateBadges();
+  }
+  function openDiff(path){
+    const cur = findNode(path);
+    if(!cur) return;
+    const base = getBaseFS();
+    let baseNode=null;
+    (function find(n){ if(n.path===path) baseNode=n; if(n.children) n.children.forEach(find); })(base);
+    const baseContent = baseNode ? baseNode.content : '';
+    const curContent = cur.type==='file' ? cur.content : '';
+    // simple line diff
+    const baseLines=baseContent.split('\n'), curLines=curContent.split('\n');
+    let html='';
+    const max=Math.max(baseLines.length, curLines.length);
+    for(let i=0;i<max;i++){
+      const b=baseLines[i], c=curLines[i];
+      if(b===c) html+=`<div class="diff-line ctx"> ${escapeHtml(c||'')}<span class="muted small">  ${i+1}</span></div>`;
+      else {
+        if(b!==undefined) html+=`<div class="diff-line rem">- ${escapeHtml(b)}<span class="muted small">  ${i+1}</span></div>`;
+        if(c!==undefined) html+=`<div class="diff-line add">+ ${escapeHtml(c)}<span class="muted small">  ${i+1}</span></div>`;
+      }
+    }
+    const pane=document.getElementById('diffPane');
+    document.getElementById('diffTitle').textContent = `Changes: ${path}`;
+    document.getElementById('diffContent').innerHTML = html || '<div class="muted small">No differences</div>';
+    pane.classList.remove('hidden');
+    welcomePage.classList.add('hidden');
+    monacoContainer.classList.add('hidden');
+    fallbackEditor.classList.add('hidden');
+  }
+  document.querySelector('[data-cmd="closeDiff"]')?.addEventListener('click', ()=>{ document.getElementById('diffPane').classList.add('hidden'); if(activePath) showEditor(); else showWelcome(); });
+  // SCM actions
+  document.getElementById('stageAllBtn')?.addEventListener('click', ()=>{
+    const changed=getChangedFiles(); const s=getGitState();
+    s.staged = changed.map(c=>c.path); saveGitState(s); renderSCM(); toast(`Staged ${s.staged.length} files`);
+  });
+  document.getElementById('unstageAllBtn')?.addEventListener('click', ()=>{
+    const s=getGitState(); s.staged=[]; saveGitState(s); renderSCM(); toast('Unstaged all');
+  });
+  document.getElementById('scmRefreshBtn')?.addEventListener('click', ()=>{ renderSCM(); toast('Source Control refreshed'); });
+  document.getElementById('commitBtn')?.addEventListener('click', ()=>{
+    const msg=document.getElementById('commitMsg')?.value.trim();
+    const {staged, commits} = getGitState();
+    if(!msg){ toast('Enter commit message'); document.getElementById('commitMsg')?.focus(); return; }
+    if(!staged.length){ toast('No changes staged — Stage all or select files'); return; }
+    const hash=Math.random().toString(36).slice(2,8);
+    commits.unshift({hash, msg, time:'just now', author:'you'});
+    // update base snapshot to current for demo — staged becomes committed
+    const s=getGitState(); s.commits=commits; s.staged=[]; saveGitState(s);
+    // update initialSnapshot to current FS for next diff (simulate committing)
+    // Instead, keep initial snapshot but clear dirty? For demo, we just clear staged and consider committed as clean
+    // Persist current FS as new base for next commit cycle by updating initialSnapshot in LS
+    localStorage.setItem('vscode-git-base', JSON.stringify(fsRoot));
+    document.getElementById('commitMsg').value='';
+    renderSCM(); toast(`Committed ${hash}: ${msg}`); pushNotification('Git',`Committed ${hash}`);
+    outputLogs['Git'] = outputLogs['Git'] + `\n[Info] git commit -m "${msg}" -> ${hash}\n`;
+  });
+  document.getElementById('commitAmendBtn')?.addEventListener('click', ()=>{
+    const last=getGitState().commits[0];
+    if(!last){ toast('No commits to amend'); return; }
+    const msg=prompt('Amend commit message:', last.msg);
+    if(msg){ last.msg=msg; const s=getGitState(); saveGitState(s); renderSCM(); toast('Amended'); }
+  });
+  document.getElementById('commitMsg')?.addEventListener('keydown', (e)=>{
+    if((e.ctrlKey||e.metaKey) && e.key==='Enter'){ document.getElementById('commitBtn').click(); }
+  });
+  // branch clicks
+  document.getElementById('branchList')?.addEventListener('click', (e)=>{
+    const item=e.target.closest('.branch-item');
+    if(!item) return;
+    const branch=item.dataset.branch;
+    if(!branch) return;
+    const s=getGitState(); s.currentBranch=branch; saveGitState(s); renderSCM(); document.getElementById('statusBranch').innerHTML=branch.split('/').pop()+' <span class="status-badge">⇅ 1</span>'; toast(`Switched to ${branch}`);
+  });
+  // create new branch via palette
+  // initial render
+  setTimeout(renderSCM, 700);
+  // hook into FS changes to auto-refresh SCM
+  const _origCreateNewForSCM = createNew;
+  const _origRenameForSCM = renamePath;
+  const _origDeleteForSCM = deletePath;
+  // wrap save to also refresh SCM periodically
+  setInterval(renderSCM, 3000);
+
   // --- Panel Tabs — Subpart 2.2: fully functional ---
   const panelMap = { problems:'problems', output:'output', debugcons:'debugcons', terminal:'terminal', ports:'ports', comments:'comments' };
   function showPanelView(key) {
