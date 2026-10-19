@@ -30,14 +30,14 @@
         <span>Visual Studio Code</span>
       </div>
       <nav class="titlebar-menubar" aria-label="Menu bar">
-        <button class="menubar-item">File</button>
-        <button class="menubar-item">Edit</button>
-        <button class="menubar-item">Selection</button>
-        <button class="menubar-item">View</button>
-        <button class="menubar-item">Go</button>
-        <button class="menubar-item">Run</button>
-        <button class="menubar-item">Terminal</button>
-        <button class="menubar-item">Help</button>
+        <button class="menubar-item" data-menu="file">File</button>
+        <button class="menubar-item" data-menu="edit">Edit</button>
+        <button class="menubar-item" data-menu="selection">Selection</button>
+        <button class="menubar-item" data-menu="view">View</button>
+        <button class="menubar-item" data-menu="go">Go</button>
+        <button class="menubar-item" data-menu="run">Run</button>
+        <button class="menubar-item" data-menu="terminal">Terminal</button>
+        <button class="menubar-item" data-menu="help">Help</button>
       </nav>
     </div>
 
@@ -61,7 +61,7 @@
         <button class="icon-btn" title="Toggle Secondary Side Bar (Ctrl+Alt+B)" data-action="toggle-aux" aria-label="Toggle secondary sidebar">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="3" y="3" width="11" height="10" rx="1.5" stroke="currentColor" stroke-width="1.2"/><path d="M11 3v10" stroke="currentColor" stroke-width="1.2"/></svg>
         </button>
-        <button class="icon-btn" title="Customize Layout" aria-label="Customize layout">
+        <button class="icon-btn" title="Customize Layout" data-action="custom-layout" aria-label="Customize layout">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="1.2" fill="currentColor"/><circle cx="4" cy="8" r="1.2" fill="currentColor"/><circle cx="12" cy="8" r="1.2" fill="currentColor"/></svg>
         </button>
       </div>
@@ -79,24 +79,24 @@
     <!-- Activity Bar -->
     <nav class="activitybar" aria-label="Activity Bar">
       <div class="activitybar-top">
-        <button class="activity-btn is-active" data-view="explorer" aria-label="Explorer (Ctrl+Shift+E)" aria-current="true" title="Explorer">
+        <button class="activity-btn is-active" data-view="explorer" aria-label="Explorer (Ctrl+Shift+E)" title="Explorer (Ctrl+Shift+E)">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M3 4.5A1.5 1.5 0 0 1 4.5 3H9l2 2h8.5A1.5 1.5 0 0 1 21 6.5V17.5A1.5 1.5 0 0 1 19.5 19H4.5A1.5 1.5 0 0 1 3 17.5V4.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M3 8h18" stroke="currentColor" stroke-width="1.3"/></svg>
           <span>Explorer</span>
         </button>
-        <button class="activity-btn" data-view="search" aria-label="Search (Ctrl+Shift+F)" title="Search">
+        <button class="activity-btn" data-view="search" aria-label="Search (Ctrl+Shift+F)" title="Search (Ctrl+Shift+F)">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6" stroke="currentColor" stroke-width="1.6"/><path d="M15.2 15.2L20 20" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
           <span>Search</span>
         </button>
-        <button class="activity-btn" data-view="scm" aria-label="Source Control (Ctrl+Shift+G)" title="Source Control">
+        <button class="activity-btn" data-view="scm" aria-label="Source Control (Ctrl+Shift+G)" title="Source Control (Ctrl+Shift+G)">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="8" cy="7.5" r="2.2" stroke="currentColor" stroke-width="1.5"/><path d="M8 9.7V15.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M10.2 11.5C10.2 11.5 13 12 13 15c0 2.2-1.8 4-4 4M8 15.5H16M16 11.5l-2 2 2 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span>Source Control</span>
-          <i class="activity-badge">2</i>
+          <i class="activity-badge" id="scmBadge">2</i>
         </button>
-        <button class="activity-btn" data-view="debug" aria-label="Run and Debug (Ctrl+Shift+D)" title="Run and Debug">
+        <button class="activity-btn" data-view="debug" aria-label="Run and Debug (Ctrl+Shift+D)" title="Run and Debug (Ctrl+Shift+D)">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 4L8.5 9.5H12V14.5H8.5L12 20" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.4" opacity="0.9"/></svg>
           <span>Run</span>
         </button>
-        <button class="activity-btn" data-view="extensions" aria-label="Extensions (Ctrl+Shift+X)" title="Extensions">
+        <button class="activity-btn" data-view="extensions" aria-label="Extensions (Ctrl+Shift+X)" title="Extensions (Ctrl+Shift+X)">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="1.2" stroke="currentColor" stroke-width="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.2" stroke="currentColor" stroke-width="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.2" stroke="currentColor" stroke-width="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.2" stroke="currentColor" stroke-width="1.5"/></svg>
           <span>Extensions</span>
         </button>
@@ -109,7 +109,7 @@
         <button class="activity-btn" data-view="accounts" aria-label="Accounts" title="Accounts">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.2" stroke="currentColor" stroke-width="1.5"/><path d="M5.5 18.5a6.5 6.5 0 0 1 13 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
         </button>
-        <button class="activity-btn" data-view="manage" aria-label="Manage" title="Manage">
+        <button class="activity-btn" data-view="manage" aria-label="Manage" title="Manage — Settings">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M4.8 4.8l1.4 1.4M17.8 17.8l1.4 1.4M4.8 19.2l1.4-1.4M17.8 6.2l1.4-1.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
         </button>
       </div>
@@ -120,25 +120,27 @@
       <div class="sidebar-header">
         <h2 class="sidebar-title" id="sidebarTitle">Explorer</h2>
         <div class="sidebar-actions">
-          <button class="icon-btn small" title="New File..." data-cmd="newFile" aria-label="New File"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg></button>
+          <button class="icon-btn small" title="New File... (Ctrl+Alt+N)" data-cmd="newFile" aria-label="New File"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg></button>
           <button class="icon-btn small" title="New Folder..." data-cmd="newFolder" aria-label="New Folder"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2.5 5.5A1.5 1.5 0 0 1 4 4h3l1.2 1.2H12A1.5 1.5 0 0 1 13.5 6.7v5.3A1.5 1.5 0 0 1 12 13.5H4A1.5 1.5 0 0 1 2.5 12V5.5Z" stroke="currentColor" stroke-width="1.2"/><path d="M8 9v3M6.5 10.5h3" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg></button>
           <button class="icon-btn small" title="Refresh Explorer" data-cmd="refresh" aria-label="Refresh"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13.5 8A5.5 5.5 0 1 1 8 2.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><path d="M13.5 2.5v3.2H10.3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-          <button class="icon-btn small" title="More Actions..." aria-label="More actions"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="1" fill="currentColor"/><circle cx="4" cy="8" r="1" fill="currentColor"/><circle cx="12" cy="8" r="1" fill="currentColor"/></svg></button>
-          <button class="icon-btn small sidebar-collapse" title="Collapse" data-action="collapse-sidebar" aria-label="Collapse sidebar"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <button class="icon-btn small" title="Collapse All" data-cmd="collapseAll"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 7h10M3 11h10M3 3h10" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg></button>
+          <button class="icon-btn small sidebar-collapse" title="Hide Primary Side Bar" data-action="collapse-sidebar" aria-label="Collapse sidebar"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         </div>
       </div>
 
       <!-- Explorer view -->
       <div class="view" data-view-panel="explorer">
         <div class="explorer-section is-open">
-          <button class="section-header" aria-expanded="true"><span class="chevron">▾</span> UBIQUITOUS-GUACAMOLE</button>
+          <button class="section-header has-actions" aria-expanded="true"><span class="chevron">▾</span> UBIQUITOUS-GUACAMOLE <span class="section-actions"><span class="muted small" id="explorerFileCount">9 files</span></span></button>
           <div class="file-tree" id="fileTree" role="tree" aria-label="Files"></div>
         </div>
         <div class="explorer-section">
-          <button class="section-header" aria-expanded="false"><span class="chevron">▸</span> OUTLINE</button>
+          <button class="section-header" data-toggle="outline" aria-expanded="false"><span class="chevron">▸</span> OUTLINE <span class="muted small" style="margin-left:auto">No symbols</span></button>
+          <div class="outline-tree hidden" id="outlineTree"></div>
         </div>
         <div class="explorer-section">
-          <button class="section-header" aria-expanded="false"><span class="chevron">▸</span> TIMELINE</button>
+          <button class="section-header" data-toggle="timeline" aria-expanded="false"><span class="chevron">▸</span> TIMELINE</button>
+          <div class="timeline-list hidden" id="timelineList"></div>
         </div>
       </div>
 
@@ -149,17 +151,30 @@
             <div class="input-wrap with-icon">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.2"/><path d="M10.5 10.5L13 13" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
               <input id="searchInput" placeholder="Search" aria-label="Search" />
+              <span class="search-actions">
+                <button class="icon-btn small" id="searchReplaceToggle" title="Toggle Replace">⤢</button>
+              </span>
             </div>
-            <div class="input-wrap with-icon">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M3 8h10M3 12h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+            <div class="input-wrap with-icon" id="replaceRow">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 6h8l-3-3M11 10H3l3 3" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/></svg>
               <input id="replaceInput" placeholder="Replace" aria-label="Replace" />
+              <button class="ghost-btn small" id="replaceOneBtn" title="Replace (Enter)">Replace</button>
+              <button class="ghost-btn small" id="replaceAllBtn" title="Replace All (Ctrl+Alt+Enter)">All</button>
+            </div>
+            <div class="input-wrap">
+              <span class="input-label">files to include</span>
+              <input id="searchInclude" placeholder="e.g. src/**" aria-label="Include" />
             </div>
             <div class="search-options">
-              <label><input type="checkbox" /> Match Case</label>
-              <label><input type="checkbox" /> Match Whole Word</label>
-              <label><input type="checkbox" /> Use Regular Expression</label>
+              <label><input type="checkbox" id="searchCase" /> Match Case</label>
+              <label><input type="checkbox" id="searchWord" /> Match Whole Word</label>
+              <label><input type="checkbox" id="searchRegex" /> Use Regular Expression</label>
             </div>
-            <div id="searchResults" class="search-results"></div>
+            <div class="search-controls">
+              <button class="primary-btn small" id="searchBtn">Search</button>
+              <button class="ghost-btn small" id="searchClearBtn">Clear</button>
+            </div>
+            <div id="searchResults" class="search-results"><div class="muted">Enter a search term. Use Replace to update all occurrences.</div></div>
           </div>
         </div>
       </div>
@@ -168,13 +183,32 @@
       <div class="view hidden" data-view-panel="scm">
         <div class="view-content scm">
           <div class="scm-input">
-            <textarea placeholder="Message (Ctrl+Enter to commit on main)" rows="2" aria-label="Commit message"></textarea>
-            <button class="primary-btn" data-cmd="commit">Commit</button>
+            <textarea id="commitMsg" placeholder="Message (Ctrl+Enter to commit on main)" rows="3" aria-label="Commit message"></textarea>
+            <div class="scm-commit-actions">
+              <button class="primary-btn" id="commitBtn">Commit</button>
+              <button class="ghost-btn small" id="commitAmendBtn" title="Amend">Amend</button>
+            </div>
+          </div>
+          <div class="scm-toolbar">
+            <button class="ghost-btn small" id="stageAllBtn">Stage All</button>
+            <button class="ghost-btn small" id="unstageAllBtn">Unstage All</button>
+            <button class="icon-btn small" id="scmRefreshBtn" title="Refresh">⟳</button>
+          </div>
+          <div class="scm-section" id="stagedSection">
+            <h3>Staged Changes <span class="count" id="stagedCount">0</span></h3>
+            <div id="stagedList" class="scm-list"></div>
+          </div>
+          <div class="scm-section" id="changesSection">
+            <h3>Changes <span class="count" id="changesCount">2</span></h3>
+            <div id="changesList" class="scm-list"></div>
           </div>
           <div class="scm-section">
-            <h3>Changes <span class="count">2</span></h3>
-            <div class="scm-file"><span class="scm-status M">M</span> src/app.js</div>
-            <div class="scm-file"><span class="scm-status U">U</span> README.md</div>
+            <h3>Commits <span class="count" id="commitCount">1</span></h3>
+            <div id="commitsList" class="scm-list"><div class="scm-commit-item"><span class="scm-hash">189fb54</span> Add VSCode User Setup executable <span class="muted small">— 2h ago</span></div></div>
+          </div>
+          <div class="scm-section">
+            <h3>Branches</h3>
+            <div class="branch-list" id="branchList"><div class="branch-item is-active">● main</div><div class="branch-item">○ arena/ee95291c-…</div></div>
           </div>
         </div>
       </div>
@@ -182,38 +216,60 @@
       <!-- Debug view -->
       <div class="view hidden" data-view-panel="debug">
         <div class="view-content debug">
-          <button class="primary-btn with-icon"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg> Run and Debug</button>
-          <p class="muted">To customize Run and Debug, open a folder and create a launch.json file.</p>
-          <h3>Watch</h3>
-          <h3>Breakpoints</h3>
-          <h3>Call Stack</h3>
+          <div class="debug-toolbar">
+            <button class="primary-btn with-icon small" id="startDebugBtn"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M5 3l7 5-7 5V3Z" fill="currentColor"/></svg> Start Debugging</button>
+            <button class="ghost-btn small" id="runWithoutDebugBtn">Run without Debugging</button>
+          </div>
+          <p class="muted small">Click the gutter next to line numbers to add breakpoints. Launch config: <code>.vscode/launch.json</code></p>
+          <div class="debug-section is-open">
+            <button class="section-header" aria-expanded="true"><span class="chevron">▾</span> VARIABLES</button>
+            <div id="debugVariables" class="debug-list muted small">Not debugging — start a session to inspect variables.</div>
+          </div>
+          <div class="debug-section is-open">
+            <button class="section-header" aria-expanded="true"><span class="chevron">▾</span> WATCH</button>
+            <div class="watch-input"><input id="watchInput" placeholder="Add watch expression" /><button class="ghost-btn small" id="addWatchBtn">Add</button></div>
+            <div id="watchList" class="debug-list"></div>
+          </div>
+          <div class="debug-section is-open">
+            <button class="section-header" aria-expanded="true"><span class="chevron">▾</span> CALL STACK</button>
+            <div id="callStack" class="debug-list muted small">No call stack</div>
+          </div>
+          <div class="debug-section is-open">
+            <button class="section-header" aria-expanded="true"><span class="chevron">▾</span> BREAKPOINTS <span class="count" id="bpCount">0</span></button>
+            <div id="breakpointsList" class="debug-list"></div>
+          </div>
+          <div class="debug-section">
+            <button class="section-header" aria-expanded="true"><span class="chevron">▾</span> DEBUG CONSOLE</button>
+            <div class="debug-console" id="debugConsole"><div class="muted small">Debug console will show program output</div></div>
+          </div>
         </div>
       </div>
 
       <!-- Extensions view -->
       <div class="view hidden" data-view-panel="extensions">
         <div class="view-content extensions">
-          <div class="input-wrap"><input placeholder="Search Extensions in Marketplace" aria-label="Search extensions" /></div>
-          <div class="ext-list">
-            <div class="ext-item">
-              <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='42' height='42' viewBox='0 0 42 42'%3E%3Crect width='42' height='42' rx='8' fill='%23007ACC'/%3E%3Ctext x='21' y='26' text-anchor='middle' fill='white' font-family='Arial' font-size='18' font-weight='700'%3EPy%3C/text%3E%3C/svg%3E" alt="" />
-              <div><strong>Python</strong><span>Microsoft • 93M</span><p>IntelliSense, linting, debugging</p></div><button class="ghost-btn">Install</button>
-            </div>
-            <div class="ext-item">
-              <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='42' height='42' viewBox='0 0 42 42'%3E%3Crect width='42' height='42' rx='8' fill='%23E34F26'/%3E%3Ctext x='21' y='26' text-anchor='middle' fill='white' font-family='Arial' font-size='14' font-weight='700'%3ETS%3C/text%3E%3C/svg%3E" alt="" />
-              <div><strong>Prettier</strong><span>Prettier • 14M</span><p>Code formatter</p></div><button class="ghost-btn">Install</button>
-            </div>
-            <div class="ext-item">
-              <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='42' height='42' viewBox='0 0 42 42'%3E%3Crect width='42' height='42' rx='8' fill='%23232f3e'/%3E%3Ctext x='21' y='26' text-anchor='middle' fill='white' font-family='Arial' font-size='12' font-weight='700'%3EAWS%3C/text%3E%3C/svg%3E" alt="" />
-              <div><strong>GitLens</strong><span>GitKraken • 32M</span><p>Supercharge Git</p></div><button class="ghost-btn">Install</button>
-            </div>
-          </div>
+          <div class="input-wrap"><input id="extSearch" placeholder="Search Extensions in Marketplace" aria-label="Search extensions" /><button class="ghost-btn small" id="extFilterBtn">⋮</button></div>
+          <div class="ext-tabs"><button class="ext-tab is-active" data-filter="all">All</button><button class="ext-tab" data-filter="installed">Installed</button><button class="ext-tab" data-filter="recommended">Recommended</button></div>
+          <div class="ext-list" id="extList"></div>
+          <div class="ext-footer"><span class="muted small" id="extCount">5 marketplace extensions</span></div>
         </div>
       </div>
 
-      <!-- Remote view -->
+      <!-- Remote & Accounts stubs -->
       <div class="view hidden" data-view-panel="remote">
-        <div class="view-content"><p class="muted">No remote connection. Connect to WSL, SSH, or Containers.</p><button class="primary-btn">Connect to...</button></div>
+        <div class="view-content"><p class="muted">No remote connection.</p><button class="primary-btn small" id="connectRemoteBtn">Connect to WSL/SSH/Container</button><div class="remote-list"><div class="remote-item"><strong>WSL: Ubuntu</strong><span class="muted small">Available</span></div><div class="remote-item"><strong>SSH: dev-server</strong><span class="muted small">Not configured</span></div></div></div>
+      </div>
+      <div class="view hidden" data-view-panel="accounts">
+        <div class="view-content"><div class="account-card"><span>Sign in to sync settings</span><button class="primary-btn small">Sign in with GitHub</button></div><a href="#" class="muted small">Manage Accounts...</a></div>
+      </div>
+      <div class="view hidden" data-view-panel="manage">
+        <div class="view-content manage-view">
+          <button class="manage-item" data-cmd="openSettings">⚙ Settings (Ctrl+,)</button>
+          <button class="manage-item" data-cmd="openKeybindings">⌨ Keyboard Shortcuts</button>
+          <button class="manage-item" data-cmd="openThemes">🎨 Color Theme</button>
+          <button class="manage-item" data-cmd="openExtensions">🧩 Extensions</button>
+          <button class="manage-item" data-cmd="openSnippets">✂ Snippets</button>
+        </div>
       </div>
 
       <div class="sidebar-resizer" data-resize="sidebar" role="separator" aria-orientation="vertical" aria-label="Resize sidebar" tabindex="0"></div>
@@ -224,143 +280,207 @@
       <div class="tabs-bar" role="tablist" aria-label="Editor tabs">
         <div class="tabs-scroll" id="tabsBar"></div>
         <div class="tabs-actions">
-          <button class="icon-btn small" title="Split Editor Right" data-cmd="split"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="11" height="10" rx="1" stroke="currentColor" stroke-width="1.2"/><path d="M7 3v10" stroke="currentColor" stroke-width="1.2"/></svg></button>
-          <button class="icon-btn small" title="More Actions"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="4" r="1" fill="currentColor"/><circle cx="8" cy="8" r="1" fill="currentColor"/><circle cx="8" cy="12" r="1" fill="currentColor"/></svg></button>
+          <button class="icon-btn small" title="Split Editor Right (Ctrl+\)" data-cmd="split" aria-label="Split editor"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="11" height="10" rx="1" stroke="currentColor" stroke-width="1.2"/><path d="M7 3v10" stroke="currentColor" stroke-width="1.2"/></svg></button>
+          <button class="icon-btn small" title="Split Editor Down" data-cmd="splitDown"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="11" height="10" rx="1" stroke="currentColor" stroke-width="1.2"/><path d="M2 8.5h11" stroke="currentColor" stroke-width="1.2"/></svg></button>
+          <button class="icon-btn small" title="More Actions..." data-cmd="moreTabs"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="4" r="1" fill="currentColor"/><circle cx="8" cy="8" r="1" fill="currentColor"/><circle cx="8" cy="12" r="1" fill="currentColor"/></svg></button>
         </div>
       </div>
 
       <div class="breadcrumbs" id="breadcrumbs">
-        <span class="crumb">ubiquitous-guacamole</span><span class="sep">›</span><span class="crumb" id="breadcrumbFile">Welcome</span>
+        <span class="crumb" data-nav="">ubiquitous-guacamole</span><span class="sep">›</span><span class="crumb is-active" id="breadcrumbFile">Welcome</span>
+        <span class="breadcrumb-actions">
+          <button class="icon-btn small" title="Go to Symbol (Ctrl+Shift+O)" data-cmd="goToSymbol">⌖</button>
+        </span>
       </div>
 
-      <div class="editor-groups">
-        <div class="editor-group is-active">
+      <!-- Find Widget -->
+      <div class="find-widget hidden" id="findWidget" role="search">
+        <div class="find-row">
+          <div class="find-input-wrap"><input id="findInput" placeholder="Find" aria-label="Find" /><span class="find-info" id="findInfo">No results</span></div>
+          <button class="icon-btn small" id="findPrev" title="Previous (Shift+Enter)">↑</button>
+          <button class="icon-btn small" id="findNext" title="Next (Enter)">↓</button>
+          <label class="find-opt" title="Match Case"><input type="checkbox" id="findCase" />Aa</label>
+          <label class="find-opt" title="Match Whole Word"><input type="checkbox" id="findWord" />ab</label>
+          <label class="find-opt" title="Use Regex"><input type="checkbox" id="findRegex" />.*</label>
+          <button class="icon-btn small" id="findClose" title="Close (Esc)">✕</button>
+        </div>
+        <div class="find-row" id="replaceRow2">
+          <div class="find-input-wrap"><input id="findReplaceInput2" placeholder="Replace" aria-label="Replace" /></div>
+          <button class="ghost-btn small" id="replaceBtn">Replace</button>
+          <button class="ghost-btn small" id="replaceAllBtn2">Replace All</button>
+        </div>
+      </div>
+
+      <div class="editor-groups" id="editorGroups">
+        <div class="editor-group is-active" data-group="0">
           <!-- Welcome page -->
           <div class="welcome" id="welcomePage">
             <div class="welcome-hero">
               <div class="welcome-logo">
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none"><path d="M1.5 12L4.2 3.8L11.2 12L4.2 20.2L1.5 12Z" fill="#007ACC"/><path d="M4.2 3.8L11.2 12L22 5.5L15 1.2L4.2 3.8Z" fill="#0066B8"/><path d="M22 18.5L11.2 12L22 5.5V18.5Z" fill="#3C99D4"/><path d="M4.2 20.2L15 22.8L22 18.5L11.2 12L4.2 20.2Z" fill="#007ACC"/></svg>
                 <h1>Visual Studio Code</h1>
-                <p>Editing evolved — now in your browser</p>
+                <p>Editing evolved — now in your browser. Every feature works.</p>
               </div>
               <div class="welcome-actions">
-                <button class="welcome-card is-primary" data-cmd="newFile">
-                  <span class="wc-icon">＋</span><span><strong>New File</strong><small>Start from scratch</small></span>
-                </button>
-                <button class="welcome-card" data-cmd="openFolder">
-                  <span class="wc-icon">◫</span><span><strong>Open Folder</strong><small>Browse your workspace</small></span>
-                </button>
-                <button class="welcome-card" data-cmd="openWelcome">
-                  <span class="wc-icon">⧉</span><span><strong>Open Recent</strong><small>Quick pick recent files</small></span>
-                </button>
+                <button class="welcome-card is-primary" data-cmd="newFile"><span class="wc-icon">＋</span><span><strong>New File</strong><small>Ctrl+N — scratch</small></span></button>
+                <button class="welcome-card" data-cmd="newFolder"><span class="wc-icon">◫</span><span><strong>Open Folder</strong><small>Browse workspace</small></span></button>
+                <button class="welcome-card" data-cmd="showPalette"><span class="wc-icon">⧉</span><span><strong>Show All Commands</strong><small>Ctrl+Shift+P</small></span></button>
               </div>
               <div class="welcome-links">
-                <h3>Walkthroughs</h3>
-                <a href="#" data-open="src/app.js"><span class="link-icon">▶</span> Get Started with VS Code — discover the best customizations</a>
-                <a href="#" data-open="README.md"><span class="link-icon">◐</span> Learn the Fundamentals — jump right into VS Code</a>
-                <a href="#" data-open="package.json"><span class="link-icon">⚡</span> Boost your Productivity — tips for power users</a>
-                <a href="#" data-open="src/styles.css"><span class="link-icon">✎</span> Customize your Editor — themes, settings, keybindings</a>
+                <h3>Walkthroughs <span class="muted small">— everything works, try it</span></h3>
+                <a href="#" data-open="src/app.js"><span class="link-icon">▶</span> Get Started — open <code>src/app.js</code> and edit with Monaco</a>
+                <a href="#" data-open="README.md"><span class="link-icon">◐</span> Learn Fundamentals — search <code>Ctrl+F</code>, replace, outline</a>
+                <a href="#" data-open="package.json"><span class="link-icon">⚡</span> Terminal & Tasks — try <code>npm run dev</code> in integrated terminal</a>
+                <a href="#" data-open="src/styles.css"><span class="link-icon">✎</span> Themes — toggle via status bar or <code>Ctrl+K Ctrl+T</code></a>
+                <a href="#" data-cmd="toggleDebug"><span class="link-icon">▶</span> Run & Debug — set breakpoints by clicking gutter</a>
+              </div>
+              <div class="welcome-tips">
+                <h3>Tips</h3>
+                <ul>
+                  <li><kbd>Ctrl+P</kbd> quick open — <kbd>Ctrl+Shift+P</kbd> commands — <kbd>Ctrl+,</kbd> settings</li>
+                  <li><kbd>F5</kbd> start debugging — <kbd>Ctrl+`</kbd> terminal — <kbd>Ctrl+B</kbd> sidebar</li>
+                  <li>Right-click explorer/tabs/editor for full context menus — drag to reorder tabs</li>
+                  <li>Split editor <kbd>Ctrl+\</kbd> — minimap, word wrap, problems panel all live</li>
+                </ul>
               </div>
               <div class="welcome-footer">
-                <label><input type="checkbox" checked /> Show welcome page on startup</label>
-                <a href="https://code.visualstudio.com/docs" target="_blank" rel="noopener">Learn more about VS Code →</a>
+                <label><input type="checkbox" id="showWelcomeCheck" checked /> Show welcome page on startup</label>
+                <a href="https://code.visualstudio.com/docs" target="_blank" rel="noopener">Documentation →</a>
               </div>
             </div>
             <div class="welcome-side">
               <h3>Recent</h3>
               <div class="recent-list" id="recentList"></div>
               <h3>Help</h3>
-              <a href="#">Printable keyboard cheatsheet</a>
-              <a href="#">Introductory videos</a>
-              <a href="#">Tips and Tricks</a>
-              <a href="#">Product documentation</a>
-              <div class="welcome-version">Version 1.104.0 • <a href="https://github.com/morluto/rea" target="_blank">REA-inspired • MIT</a></div>
+              <a href="#" data-cmd="showPalette">Keyboard Shortcuts Reference</a>
+              <a href="#" data-cmd="openSettings">User Settings</a>
+              <a href="https://github.com/morluto/rea" target="_blank">REA-inspired architecture — GitHub</a>
+              <div class="welcome-version">VS Code Web 1.104.0 • Monaco 0.52.2 • <a href="#" id="checkUpdates">Check for Updates</a></div>
             </div>
           </div>
 
           <!-- Monaco container -->
           <div class="editor-container hidden" id="monacoContainer"></div>
           <div class="editor-fallback hidden" id="fallbackEditor">
+            <div class="fallback-toolbar"><span class="muted small">Fallback editor — Monaco failed to load. Syntax is plain text.</span><button class="ghost-btn small" id="fallbackFormat">Format</button></div>
             <textarea id="fallbackTextarea" spellcheck="false" aria-label="Editor"></textarea>
           </div>
 
-          <!-- Preview pane for HTML -->
+          <!-- Diff view -->
+          <div class="diff-pane hidden" id="diffPane">
+            <div class="diff-toolbar"><span id="diffTitle">Diff</span><button class="ghost-btn small" data-cmd="closeDiff">Close</button></div>
+            <div class="diff-content" id="diffContent"></div>
+          </div>
+
+          <!-- Preview pane -->
           <div class="preview-pane hidden" id="previewPane">
-            <div class="preview-toolbar"><span>Preview: index.html</span><button class="ghost-btn small" data-cmd="closePreview">Close preview</button></div>
+            <div class="preview-toolbar"><span id="previewTitle">Preview: index.html</span><button class="ghost-btn small" data-cmd="closePreview">Close preview</button></div>
             <iframe id="previewFrame" title="Live preview" sandbox="allow-scripts allow-same-origin"></iframe>
           </div>
+        </div>
+        <!-- Second group for split -->
+        <div class="editor-group hidden" data-group="1">
+          <div class="editor-container" id="monacoContainer2"></div>
+          <div class="group-header">Group 2 <button class="icon-btn small" data-cmd="closeGroup" data-group="1">✕</button></div>
         </div>
       </div>
 
       <!-- Panel -->
       <div class="panel" id="panel">
         <div class="panel-tabs" role="tablist" aria-label="Panel">
-          <button class="panel-tab is-active" data-panel="terminal" role="tab" aria-selected="true">PROBLEMS <span class="panel-count">2</span></button>
+          <button class="panel-tab is-active" data-panel="problems" role="tab" aria-selected="true">PROBLEMS <span class="panel-count" id="problemsCount">2</span></button>
           <button class="panel-tab" data-panel="output" role="tab">OUTPUT</button>
-          <button class="panel-tab" data-panel="debug" role="tab">DEBUG CONSOLE</button>
-          <button class="panel-tab is-active-panel" data-panel="terminal2" role="tab">TERMINAL</button>
+          <button class="panel-tab" data-panel="debugcons" role="tab">DEBUG CONSOLE</button>
+          <button class="panel-tab is-active-panel" data-panel="terminal" role="tab">TERMINAL</button>
           <button class="panel-tab" data-panel="ports" role="tab">PORTS</button>
           <button class="panel-tab" data-panel="comments" role="tab">COMMENTS</button>
           <div class="panel-actions">
             <button class="icon-btn small" title="Maximize Panel Size" data-action="maximize-panel"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 3h10v10H3z" stroke="currentColor" stroke-width="1.2"/><path d="M3 8h10M8 3v10" stroke="currentColor" stroke-width="1.1"/></svg></button>
-            <button class="icon-btn small" title="Close Panel" data-action="close-panel"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>
+            <button class="icon-btn small" title="Close Panel (Ctrl+J)" data-action="close-panel"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>
           </div>
         </div>
-        <div class="panel-body">
-          <div class="terminal" id="terminal">
-            <div class="terminal-toolbar">
-              <span class="term-title">bash</span>
-              <span class="term-actions">
-                <button class="icon-btn small" title="New Terminal" data-cmd="newTerminal">＋</button>
-                <button class="icon-btn small" title="Split Terminal">◫</button>
-                <button class="icon-btn small" title="Kill Terminal">🗑</button>
-                <button class="icon-btn small" title="Maximize">⛶</button>
-              </span>
+        <div class="panel-body" id="panelBody">
+          <!-- Problems -->
+          <div class="panel-view" data-panel-view="problems">
+            <div class="panel-toolbar"><span class="muted small">Diagnostics — live linting of JS/TS</span><button class="ghost-btn small" id="problemsFilterBtn">Filter</button><button class="ghost-btn small" id="problemsClearBtn">Clear</button></div>
+            <div class="problems-list" id="problemsList"></div>
+          </div>
+          <!-- Output -->
+          <div class="panel-view hidden" data-panel-view="output">
+            <div class="panel-toolbar"><select id="outputChannel" class="ghost-btn small"><option>Extension Host</option><option>Git</option><option>Tasks</option></select><button class="ghost-btn small" id="clearOutputBtn">Clear Output</button></div>
+            <div class="output-content" id="outputContent">[Info] Extension host started<br>[Info] Git extension active<br>[Info] Workspace: ubiquitous-guacamole<br></div>
+          </div>
+          <!-- Debug Console -->
+          <div class="panel-view hidden" data-panel-view="debugcons">
+            <div class="debug-input-row"><input id="debugEvalInput" placeholder="Evaluate expression (e.g. 2+2, greet('hi'))" /><button class="primary-btn small" id="debugEvalBtn">Evaluate</button></div>
+            <div class="debug-output" id="debugOutput"></div>
+          </div>
+          <!-- Terminal -->
+          <div class="panel-view is-active" data-panel-view="terminal">
+            <div class="terminal" id="terminal">
+              <div class="terminal-toolbar">
+                <span class="term-title" id="termTitle">bash — 1</span>
+                <span class="term-actions">
+                  <button class="icon-btn small" title="New Terminal (Ctrl+`)" data-cmd="newTerminal">＋</button>
+                  <button class="icon-btn small" title="Split Terminal" data-cmd="splitTerminal">◫</button>
+                  <button class="icon-btn small" title="Kill Terminal" data-cmd="killTerminal">🗑</button>
+                  <button class="icon-btn small" title="Maximize Terminal" data-action="maximize-panel">⛶</button>
+                </span>
+              </div>
+              <div class="terminal-output" id="terminalOutput" role="log" aria-live="polite"></div>
+              <div class="terminal-input-row">
+                <span class="term-prompt">➜</span><span class="term-cwd" id="termCwd">~/ubiquitous-guacamole</span><span class="term-git" id="termGit">main</span>
+                <input id="terminalInput" type="text" aria-label="Terminal input" autocomplete="off" spellcheck="false" placeholder="Type 'help' for commands • Tab completion • ↑↓ history" />
+              </div>
             </div>
-            <div class="terminal-output" id="terminalOutput" role="log" aria-live="polite"></div>
-            <div class="terminal-input-row">
-              <span class="term-prompt">➜</span><span class="term-cwd">~/ubiquitous-guacamole</span><span class="term-git">main</span>
-              <input id="terminalInput" type="text" aria-label="Terminal input" autocomplete="off" spellcheck="false" placeholder="Type a command — try 'help', 'ls', 'npm run dev'" />
-            </div>
+          </div>
+          <!-- Ports -->
+          <div class="panel-view hidden" data-panel-view="ports">
+            <div class="problems-list muted small" style="padding:12px">No forwarded ports. Run a server (e.g. <code>npm run dev</code>) to see ports here.</div>
+            <div class="ports-list" id="portsList"></div>
+          </div>
+          <!-- Comments -->
+          <div class="panel-view hidden" data-panel-view="comments">
+            <div class="muted small" style="padding:12px">No comments in this workspace.</div>
           </div>
         </div>
         <div class="panel-resizer" data-resize="panel" role="separator" aria-orientation="horizontal" aria-label="Resize panel" tabindex="0"></div>
       </div>
     </main>
 
-    <!-- Auxiliary Bar (Copilot / Secondary Sidebar) -->
+    <!-- Auxiliary Bar -->
     <aside class="auxiliarybar" id="auxiliaryBar" aria-label="Secondary Side Bar">
       <div class="aux-header">
         <h2>Copilot Chat</h2>
         <div class="aux-actions">
-          <button class="icon-btn small" title="New Chat"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg></button>
-          <button class="icon-btn small" title="Close" data-action="close-aux"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg></button>
+          <button class="icon-btn small" title="New Chat (Ctrl+Alt+I)" data-cmd="newChat"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg></button>
+          <button class="icon-btn small" title="Open Chat History"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M3 8h6M3 12h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg></button>
+          <button class="icon-btn small" title="Close Secondary Side Bar" data-action="close-aux"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg></button>
         </div>
       </div>
       <div class="chat-container">
         <div class="chat-mode">
-          <button class="chat-mode-btn is-active">Ask</button>
-          <button class="chat-mode-btn">Agent</button>
-          <button class="chat-mode-btn">Edit</button>
+          <button class="chat-mode-btn is-active" data-mode="ask">Ask</button>
+          <button class="chat-mode-btn" data-mode="agent">Agent</button>
+          <button class="chat-mode-btn" data-mode="edit">Edit</button>
         </div>
         <div class="chat-messages" id="chatMessages">
           <div class="chat-msg assistant">
             <div class="msg-avatar">✦</div>
-            <div class="msg-body"><p>Hello! I'm Copilot. Ask me about your codebase, or let me build features with <code>rea</code>-style inspection.</p><p class="muted small">Try: “Explain how search works in this file”</p></div>
+            <div class="msg-body"><p><strong>Copilot</strong> — I can <em>read</em>, <em>edit</em>, and <em>run</em> your workspace. Try:</p><ul><li>“Explain how search works”</li><li>“Create a React counter component”</li><li>“Fix the lint errors in src/app.js”</li></ul><p class="muted small">Powered by REA-style inspection — I work on your local files, no upload.</p></div>
           </div>
         </div>
         <div class="chat-input-area">
           <div class="chat-input-wrap">
-            <textarea id="chatInput" placeholder="Ask Copilot or type '/' for commands" rows="2" aria-label="Chat input"></textarea>
+            <div class="chat-attachments" id="chatAttachments"></div>
+            <textarea id="chatInput" placeholder="Ask Copilot, '/' for commands, '#file' for context" rows="2" aria-label="Chat input"></textarea>
             <div class="chat-input-actions">
-              <span class="chat-context">Add Context ▾</span>
+              <button class="ghost-btn small" id="attachFileBtn" title="Attach context"># Add Context</button>
+              <button class="ghost-btn small" id="voiceBtn" title="Voice">🎤</button>
               <button class="send-btn" id="sendChat" aria-label="Send">↑</button>
             </div>
           </div>
-          <div class="chat-footer">
-            <span>Agent can make edits, run terminal commands</span>
-            <span class="model-select">GPT-4o ▾</span>
-          </div>
+          <div class="chat-footer"><span>Agent can edit files & run commands</span><span class="model-select" id="modelSelect">GPT-4o ▾</span></div>
         </div>
       </div>
       <div class="aux-resizer" data-resize="aux" role="separator" aria-orientation="vertical" aria-label="Resize secondary sidebar" tabindex="0"></div>
@@ -370,19 +490,21 @@
   <!-- Status Bar -->
   <footer class="statusbar" role="contentinfo" aria-label="Status bar">
     <div class="statusbar-left">
-      <a class="status-item accent" href="#" title="Remote Window"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4l6-2 6 2v8l-6 2-6-2V4Z" stroke="currentColor" stroke-width="1.2"/><path d="M2 4l6 2M14 4l-6 2M8 6v8" stroke="currentColor" stroke-width="1.1"/></svg> <span>WSL: Ubuntu</span></a>
-      <a class="status-item" href="#"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.2"/><path d="M8 2v2M8 12v2M2 8h2M12 8h2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg> main <span class="status-badge">⇅ 1</span></a>
-      <span class="status-item"><span class="status-dot error"></span> 2 <span class="status-dot warn"></span> 5</span>
+      <a class="status-item accent" id="statusRemote" href="#" title="Remote Window — click to choose"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4l6-2 6 2v8l-6 2-6-2V4Z" stroke="currentColor" stroke-width="1.2"/><path d="M2 4l6 2M14 4l-6 2M8 6v8" stroke="currentColor" stroke-width="1.1"/></svg> <span>WSL: Ubuntu</span></a>
+      <a class="status-item" id="statusBranch" href="#" title="Source Control — current branch"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.2"/><path d="M8 4.5V6M8 10v2M4.5 8H6M10 8h1.5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg> main <span class="status-badge">⇅ 1</span></a>
+      <button class="status-item" id="statusProblems" title="Show Problems (Ctrl+Shift+M)"><span class="status-dot error"></span> <span id="statusErrorCount">2</span> <span class="status-dot warn"></span> <span id="statusWarnCount">5</span></button>
+      <button class="status-item" id="statusSync" title="Sync">↻</button>
     </div>
     <div class="statusbar-right">
-      <button class="status-item" id="statusLanguage" title="Select Language Mode">JavaScript</button>
-      <button class="status-item">UTF-8</button>
-      <button class="status-item">LF</button>
-      <button class="status-item" id="statusEol">Spaces: 2</button>
-      <span class="status-item" id="statusPosition">Ln 1, Col 1</span>
-      <button class="status-item" id="statusZoom">Zoom: 100%</button>
-      <button class="status-item icon-only" title="Notifications" aria-label="Notifications"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2.5a5.5 5.5 0 0 1 5.5 5.5v2.2l1 1.3H1.5l1-1.3V8A5.5 5.5 0 0 1 8 2.5Z" stroke="currentColor" stroke-width="1.2"/><path d="M6.2 14.5a1.8 1.8 0 0 0 3.6 0" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg></button>
-      <button class="status-item icon-only" title="Manage" aria-label="Manage settings"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.2"/><path d="M8 2.5v2M8 11.5v2M2.5 8h2M11.5 8h2" stroke="currentColor" stroke-width="1.2"/></svg></button>
+      <button class="status-item" id="statusLanguage" title="Select Language Mode (Ctrl+K M)">JavaScript</button>
+      <button class="status-item" id="statusEncoding" title="Select Encoding">UTF-8</button>
+      <button class="status-item" id="statusEolStatus" title="Select End of Line Sequence">LF</button>
+      <button class="status-item" id="statusIndent" title="Select Indentation">Spaces: 2</button>
+      <button class="status-item" id="statusPosition" title="Go to Line/Column (Ctrl+G)">Ln 1, Col 1</button>
+      <button class="status-item" id="statusSelection" title="Selection">No Selection</button>
+      <button class="status-item" id="statusZoom" title="Zoom">Zoom: 100%</button>
+      <button class="status-item icon-only" id="statusNotifications" title="Notifications" aria-label="Notifications"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2.5a5.5 5.5 0 0 1 5.5 5.5v2.2l1 1.3H1.5l1-1.3V8A5.5 5.5 0 0 1 8 2.5Z" stroke="currentColor" stroke-width="1.2"/><path d="M6.2 14.5a1.8 1.8 0 0 0 3.6 0" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg><span class="notif-badge hidden" id="notifBadge">1</span></button>
+      <button class="status-item icon-only" id="statusFeedback" title="Feedback">☺</button>
     </div>
   </footer>
 
@@ -390,17 +512,53 @@
   <div class="palette-overlay hidden" id="paletteOverlay" role="dialog" aria-modal="true" aria-label="Command Palette">
     <div class="palette">
       <div class="palette-input-wrap">
-        <span class="palette-prefix">›</span>
+        <span class="palette-prefix" id="palettePrefix">›</span>
         <input id="paletteInput" type="text" placeholder="Type a command or search..." autocomplete="off" spellcheck="false" aria-label="Command palette input" />
-        <span class="palette-hint">ESC to close</span>
+        <span class="palette-hint" id="paletteHint">ESC to close</span>
       </div>
       <div class="palette-list" id="paletteList" role="listbox"></div>
-      <div class="palette-footer">Use ↑↓ to navigate • Enter to select</div>
+      <div class="palette-footer">↑↓ navigate • Enter select • Esc close • Type > for commands, @ for symbols</div>
     </div>
   </div>
 
   <!-- Context Menu -->
   <div class="context-menu hidden" id="contextMenu" role="menu"></div>
+  <!-- Titlebar menu dropdown -->
+  <div class="context-menu hidden" id="titleMenu" role="menu"></div>
+
+  <!-- Pickers -->
+  <div class="picker-overlay hidden" id="pickerOverlay" role="dialog" aria-modal="true">
+    <div class="picker" id="picker"></div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="modal-overlay hidden" id="settingsOverlay" role="dialog" aria-modal="true" aria-label="Settings">
+    <div class="modal">
+      <div class="modal-header"><h2>Settings</h2><button class="icon-btn small" data-close="settings">✕</button></div>
+      <div class="modal-body settings-grid">
+        <div class="settings-sidebar"><button class="settings-nav is-active" data-settings="common">Commonly Used</button><button class="settings-nav" data-settings="editor">Text Editor</button><button class="settings-nav" data-settings="workbench">Workbench</button><button class="settings-nav" data-settings="features">Features</button><button class="settings-nav" data-settings="application">Application</button></div>
+        <div class="settings-content" id="settingsContent">
+          <div class="setting-item"><label>Color Theme <select id="settingTheme"><option value="dark">Dark Modern</option><option value="light">Light Modern</option><option value="hc">High Contrast</option></select></label></div>
+          <div class="setting-item"><label>Font Size <input type="number" id="settingFontSize" min="8" max="30" value="13" /> px</label></div>
+          <div class="setting-item"><label>Tab Size <input type="number" id="settingTabSize" min="1" max="8" value="2" /></label></div>
+          <div class="setting-item"><label><input type="checkbox" id="settingWordWrap" checked /> Word Wrap</label></div>
+          <div class="setting-item"><label><input type="checkbox" id="settingMinimap" checked /> Minimap</label></div>
+          <div class="setting-item"><label><input type="checkbox" id="settingAutoSave" /> Auto Save (after delay)</label></div>
+          <div class="setting-item"><label><input type="checkbox" id="settingWelcome" checked /> Show Welcome on Startup</label></div>
+        </div>
+      </div>
+      <div class="modal-footer"><button class="ghost-btn" data-close="settings">Close</button><button class="primary-btn" id="resetSettingsBtn">Reset to Defaults</button></div>
+    </div>
+  </div>
+
+  <!-- Go to Line Modal -->
+  <div class="mini-palette hidden" id="gotoLinePalette"><div class="mini-input"><span>:</span><input id="gotoLineInput" type="text" placeholder="Go to line (:line,column)" aria-label="Go to line" /></div></div>
+
+  <!-- Notifications Center -->
+  <div class="notifications hidden" id="notificationsPanel">
+    <div class="notifications-header">Notifications <button class="ghost-btn small" id="clearNotificationsBtn">Clear All</button><button class="icon-btn small" id="closeNotificationsBtn">✕</button></div>
+    <div class="notifications-list" id="notificationsList"><div class="muted small" style="padding:12px">No notifications</div></div>
+  </div>
 
   <!-- Toast -->
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>

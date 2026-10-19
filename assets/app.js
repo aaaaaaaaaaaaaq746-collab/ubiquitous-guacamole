@@ -1015,7 +1015,34 @@ Built with ❤️ — not affiliated with Microsoft.
     contextMenu.classList.remove('hidden');
     setTimeout(() => document.addEventListener('click', hideContextMenu, { once: true }), 0);
   }
-  function hideContextMenu() { contextMenu.classList.add('hidden'); }
+  function hideContextMenu() {
+    contextMenu.classList.add('hidden');
+    const tm = document.getElementById('titleMenu');
+    if (tm) tm.classList.add('hidden');
+    document.querySelectorAll('.menubar-item.is-active').forEach(b=>b.classList.remove('is-active'));
+    openMenu = null;
+  }
+  // extend showContextMenu to support titleMenu
+  const originalShowContextMenu = showContextMenu;
+  // Override to handle titleMenu id
+  function showContextMenu(x,y, items, menuId='contextMenu') {
+    const menuEl = document.getElementById(menuId);
+    if (!menuEl) return;
+    menuEl.innerHTML = '';
+    items.forEach(it => {
+      if (it.type === 'sep') { const d = document.createElement('div'); d.className = 'ctx-item sep'; menuEl.appendChild(d); return; }
+      const el = document.createElement('div');
+      el.className = 'ctx-item';
+      el.setAttribute('role','menuitem');
+      el.innerHTML = `<span>${it.label}</span>${it.kbd ? `<span class="ctx-kbd">${it.kbd}</span>` : ''}`;
+      el.addEventListener('click', () => { hideContextMenu(); it.action(); });
+      menuEl.appendChild(el);
+    });
+    menuEl.style.left = Math.min(x, window.innerWidth - 240) + 'px';
+    menuEl.style.top = Math.min(y, window.innerHeight - menuEl.offsetHeight - 20) + 'px';
+    menuEl.classList.remove('hidden');
+    setTimeout(() => document.addEventListener('click', hideContextMenu, { once: true }), 0);
+  }
   document.addEventListener('contextmenu', (e) => {
     if (!e.target.closest('.file-tree') && !e.target.closest('.tabs-bar')) return;
     // handled above for file-tree; for tabs show close others etc.
@@ -1118,30 +1145,193 @@ Built with ❤️ — not affiliated with Microsoft.
     document.getElementById('statusZoom').textContent = `Zoom: ${next}%`;
   });
 
-  // titlebar menubar clicks
+  // --- Titlebar: Full menus (Subpart 1.1) ---
+  const titleMenus = {
+    file: [
+      {label:'New Text File', kbd:'Ctrl+N', action:()=>createNew('file','')},
+      {label:'New File...', kbd:'Ctrl+Alt+N', action:()=>createNew('file','')},
+      {label:'New Folder...', action:()=>createNew('folder','')},
+      {type:'sep'},
+      {label:'Open File...', kbd:'Ctrl+O', action:()=>openPalette('')},
+      {label:'Open Folder...', kbd:'Ctrl+K Ctrl+O', action:()=>toast('Open Folder — use Explorer “New File” or drag & drop a file here')},
+      {label:'Open Recent...', kbd:'Ctrl+R', action:()=>openPalette('')},
+      {type:'sep'},
+      {label:'Save', kbd:'Ctrl+S', action:saveCurrent},
+      {label:'Save As...', kbd:'Ctrl+Shift+S', action:()=>{ saveCurrent(); toast('Saved As — download triggered'); downloadCurrent(); }},
+      {label:'Save All', kbd:'Ctrl+K S', action:()=>{ openTabs.forEach(t=>{ const tab=findNode(t.path); if(tab) t.dirty=false; }); renderTabs(); saveFS(); toast('All files saved'); }},
+      {type:'sep'},
+      {label:'Close Editor', kbd:'Ctrl+F4', action:()=>activePath && closeTab(activePath)},
+      {label:'Close Folder', kbd:'Ctrl+K F', action:()=>{ openTabs=[]; activePath=null; showWelcome(); renderTabs(); toast('Folder closed'); }},
+      {label:'Close Window', kbd:'Alt+F4', action:()=>toast('Close Window — browser tab would close (blocked)')},
+      {type:'sep'},
+      {label:'Exit', action:()=>toast('Exit — use browser close')},
+    ],
+    edit: [
+      {label:'Undo', kbd:'Ctrl+Z', action:()=>{ if(monacoEditor) monacoEditor.trigger('kb','undo'); else document.execCommand('undo'); toast('Undo'); }},
+      {label:'Redo', kbd:'Ctrl+Y', action:()=>{ if(monacoEditor) monacoEditor.trigger('kb','redo'); else document.execCommand('redo'); toast('Redo'); }},
+      {type:'sep'},
+      {label:'Cut', kbd:'Ctrl+X', action:()=>{ document.execCommand('cut'); toast('Cut'); }},
+      {label:'Copy', kbd:'Ctrl+C', action:()=>{ document.execCommand('copy'); toast('Copied'); }},
+      {label:'Paste', kbd:'Ctrl+V', action:()=>{ document.execCommand('paste'); toast('Paste'); }},
+      {type:'sep'},
+      {label:'Find', kbd:'Ctrl+F', action:()=>openFindWidget()},
+      {label:'Replace', kbd:'Ctrl+H', action:()=>openFindWidget(true)},
+      {label:'Find in Files', kbd:'Ctrl+Shift+F', action:()=>switchView('search')},
+      {label:'Replace in Files', kbd:'Ctrl+Shift+H', action:()=>switchView('search')},
+      {type:'sep'},
+      {label:'Toggle Line Comment', kbd:'Ctrl+/', action:()=>{ if(monacoEditor) monacoEditor.getAction('editor.action.commentLine').run(); toast('Toggled comment'); }},
+      {label:'Toggle Block Comment', kbd:'Shift+Alt+A', action:()=>{ if(monacoEditor) monacoEditor.getAction('editor.action.blockComment').run(); }},
+    ],
+    selection: [
+      {label:'Select All', kbd:'Ctrl+A', action:()=>{ if(monacoEditor) monacoEditor.setSelection(monacoEditor.getModel().getFullModelRange()); else fallbackTextarea.select(); }},
+      {label:'Expand Selection', kbd:'Shift+Alt+→', action:()=>toast('Expand Selection — via Monaco smart select')},
+      {label:'Shrink Selection', kbd:'Shift+Alt+←', action:()=>toast('Shrink Selection')},
+      {type:'sep'},
+      {label:'Copy Line Up', kbd:'Shift+Alt+↑', action:()=>{ if(monacoEditor) monacoEditor.getAction('editor.action.copyLinesDownAction').run(); }},
+      {label:'Move Line Up', kbd:'Alt+↑', action:()=>{ if(monacoEditor) monacoEditor.getAction('editor.action.moveLinesUpAction').run(); }},
+      {label:'Move Line Down', kbd:'Alt+↓', action:()=>{ if(monacoEditor) monacoEditor.getAction('editor.action.moveLinesDownAction').run(); }},
+      {label:'Add Cursor Above', kbd:'Ctrl+Alt+↑', action:()=>toast('Add cursor — Ctrl+Alt+Up (Monaco)')},
+      {label:'Add Cursor Below', kbd:'Ctrl+Alt+↓', action:()=>toast('Add cursor — Ctrl+Alt+Down')},
+    ],
+    view: [
+      {label:'Command Palette...', kbd:'Ctrl+Shift+P', action:()=>openPalette('>')},
+      {label:'Open View...', kbd:'Ctrl+Q', action:()=>openPalette('>View:')},
+      {type:'sep'},
+      {label:'Explorer', kbd:'Ctrl+Shift+E', action:()=>switchView('explorer')},
+      {label:'Search', kbd:'Ctrl+Shift+F', action:()=>switchView('search')},
+      {label:'Source Control', kbd:'Ctrl+Shift+G', action:()=>switchView('scm')},
+      {label:'Run and Debug', kbd:'Ctrl+Shift+D', action:()=>switchView('debug')},
+      {label:'Extensions', kbd:'Ctrl+Shift+X', action:()=>switchView('extensions')},
+      {type:'sep'},
+      {label:'Toggle Primary Side Bar', kbd:'Ctrl+B', action:toggleSidebar},
+      {label:'Toggle Panel', kbd:'Ctrl+J', action:togglePanel},
+      {label:'Toggle Secondary Side Bar', kbd:'Ctrl+Alt+B', action:toggleAux},
+      {label:'Toggle Status Bar', action:()=>{ document.querySelector('.statusbar').classList.toggle('hidden'); toast('Status Bar toggled'); }},
+      {type:'sep'},
+      {label:'Word Wrap', kbd:'Alt+Z', action:()=>{ const cur=localStorage.getItem('vscode-wordwrap')!=='off'; const next=!cur; localStorage.setItem('vscode-wordwrap', next?'on':'off'); if(monacoEditor) monacoEditor.updateOptions({wordWrap: next?'on':'off'}); toast('Word Wrap: '+(next?'On':'Off')); }},
+      {label:'Minimap', action:()=>{ const cur=localStorage.getItem('vscode-minimap')!=='off'; const next=!cur; localStorage.setItem('vscode-minimap', next?'on':'off'); if(monacoEditor) monacoEditor.updateOptions({minimap:{enabled:next}}); toast('Minimap: '+(next?'On':'Off')); }},
+      {label:'Appearance → Full Screen', kbd:'F11', action:()=>{ if(!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); }},
+      {label:'Appearance → Zen Mode', kbd:'Ctrl+K Z', action:()=>{ document.body.classList.toggle('zen-mode'); toast('Zen Mode toggled — press Esc to exit'); }},
+    ],
+    go: [
+      {label:'Back', kbd:'Alt+←', action:()=>toast('Go Back — history navigation')},
+      {label:'Forward', kbd:'Alt+→', action:()=>toast('Go Forward')},
+      {type:'sep'},
+      {label:'Go to File...', kbd:'Ctrl+P', action:()=>openPalette('')},
+      {label:'Go to Symbol', kbd:'Ctrl+Shift+O', action:()=>openPalette('@')},
+      {label:'Go to Definition', kbd:'F12', action:()=>toast('Go to Definition — Monaco peek')},
+      {label:'Go to Line/Column...', kbd:'Ctrl+G', action:()=>openGotoLine()},
+      {type:'sep'},
+      {label:'Next Problem', kbd:'F8', action:()=>toast('Next Problem — see Problems panel (Ctrl+Shift+M)')},
+      {label:'Previous Problem', kbd:'Shift+F8', action:()=>toast('Previous Problem')},
+    ],
+    run: [
+      {label:'Start Debugging', kbd:'F5', action:()=>{ switchView('debug'); document.getElementById('startDebugBtn')?.click(); toast('Debugging started — breakpoint will pause (demo)'); }},
+      {label:'Run Without Debugging', kbd:'Ctrl+F5', action:()=>toast('Run without Debugging — executing via terminal node')},
+      {label:'Stop Debugging', kbd:'Shift+F5', action:()=>toast('Debugging stopped')},
+      {type:'sep'},
+      {label:'Open Configurations', action:()=>openFile('.vscode/launch.json')},
+      {label:'Add Configuration...', action:()=>toast('Add Configuration to launch.json')},
+      {type:'sep'},
+      {label:'Step Over', kbd:'F10', action:()=>toast('Step Over (debug)')},
+      {label:'Step Into', kbd:'F11', action:()=>toast('Step Into')},
+      {label:'Continue', kbd:'F5', action:()=>toast('Continue')},
+    ],
+    terminal: [
+      {label:'New Terminal', kbd:'Ctrl+`', action:()=>{ togglePanel(); document.getElementById('terminalInput')?.focus(); toast('New Terminal — bash ready'); }},
+      {label:'Split Terminal', kbd:'Ctrl+Shift+5', action:()=>toast('Split Terminal — use new tab (demo)')},
+      {label:'Kill Terminal', action:()=>{ document.getElementById('terminalOutput').innerHTML=''; toast('Terminal cleared'); }},
+      {type:'sep'},
+      {label:'Run Build Task...', kbd:'Ctrl+Shift+B', action:()=>terminalLog('Task: npm run build — simulated', 'info')},
+      {label:'Run Active File', action:()=>{ if(activePath) terminalLog(`Running ${activePath}...`); if(activePath?.endsWith('.js')) commands.node([activePath]); }},
+      {type:'sep'},
+      {label:'Clear Terminal', kbd:'Ctrl+K', action:()=>{ document.getElementById('terminalOutput').innerHTML=''; }},
+    ],
+    help: [
+      {label:'Welcome', action:()=>showWelcome()},
+      {label:'Show All Commands', kbd:'Ctrl+Shift+P', action:()=>openPalette('>')},
+      {label:'Keyboard Shortcuts Reference', kbd:'Ctrl+K Ctrl+S', action:()=>toast('Keyboard Shortcuts — Ctrl+K Ctrl+S to open settings')},
+      {type:'sep'},
+      {label:'Documentation', action:()=>window.open('https://code.visualstudio.com/docs','_blank')},
+      {label:'Check for Updates...', action:()=>toast('VS Code Web is up to date — v1.104.0')},
+      {label:'About', action:()=>toast('Visual Studio Code — Web Clone — v1.104.0 • REA-inspired • MIT • Not affiliated with Microsoft')},
+    ]
+  };
+
+  function switchView(view) {
+    const btn = document.querySelector(`.activity-btn[data-view="${view}"]`);
+    if (btn) btn.click();
+    sidebar.classList.remove('is-collapsed');
+  }
+  function openFindWidget(showReplace=false) {
+    const w = document.getElementById('findWidget');
+    if (!w) return;
+    w.classList.remove('hidden');
+    document.getElementById('findInput').focus();
+    if (showReplace) document.getElementById('replaceRow2').classList.remove('hidden');
+    // also trigger Monaco find
+    if (monacoEditor) monacoEditor.getAction('actions.find').run();
+  }
+  function openGotoLine() {
+    const p = document.getElementById('gotoLinePalette');
+    if (!p) return; p.classList.remove('hidden');
+    document.getElementById('gotoLineInput').focus();
+  }
+  function downloadCurrent() {
+    if (!activePath) return;
+    const node = findNode(activePath);
+    if (!node) return;
+    const blob = new Blob([node.content], {type:'text/plain'});
+    const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=node.name; a.click();
+  }
+
+  // Titlebar menubar — full 8 menus with hover
+  let openMenu = null;
   document.querySelectorAll('.menubar-item').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const label = btn.textContent.trim();
-      if (label === 'File') showContextMenu(btn.getBoundingClientRect().left, btn.getBoundingClientRect().bottom + 4, [
-        {label:'New File', kbd:'Ctrl+N', action:()=>createNew('file','')},
-        {label:'New Folder', action:()=>createNew('folder','')},
-        {type:'sep'},
-        {label:'Save', kbd:'Ctrl+S', action:saveCurrent},
-        {label:'Save As...', action:saveCurrent},
-        {type:'sep'},
-        {label:'Close Editor', kbd:'Ctrl+F4', action:()=>activePath && closeTab(activePath)},
-      ]);
-      else if (label === 'Edit') showContextMenu(btn.getBoundingClientRect().left, btn.getBoundingClientRect().bottom + 4, [
-        {label:'Undo', kbd:'Ctrl+Z', action:()=>document.execCommand('undo')},
-        {label:'Redo', kbd:'Ctrl+Y', action:()=>document.execCommand('redo')},
-        {label:'Cut', kbd:'Ctrl+X', action:()=>document.execCommand('cut')},
-        {label:'Copy', kbd:'Ctrl+C', action:()=>document.execCommand('copy')},
-        {label:'Paste', kbd:'Ctrl+V', action:()=>document.execCommand('paste')},
-      ]);
-      else showContextMenu(btn.getBoundingClientRect().left, btn.getBoundingClientRect().bottom + 4, [
-        {label: label + ' — coming soon', action:()=>toast(label + ' menu — demo')},
-      ]);
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const key = btn.dataset.menu;
+      const items = titleMenus[key];
+      if (!items) return;
+      if (openMenu === key) { hideContextMenu(); openMenu=null; return; }
+      openMenu = key;
+      const rect = btn.getBoundingClientRect();
+      showContextMenu(rect.left, rect.bottom + 4, items, 'titleMenu');
+      btn.classList.add('is-active');
     });
+    btn.addEventListener('mouseenter', ()=>{
+      if (openMenu && openMenu !== btn.dataset.menu) {
+        hideContextMenu();
+        btn.click();
+      }
+    });
+  });
+  // close title menu on outside click handled by contextMenu listener
+
+  // Search bar in titlebar — quick open
+  const quickInputEl = document.getElementById('quickInput');
+  if (quickInputEl) {
+    quickInputEl.addEventListener('focus', ()=>{ openPalette(''); quickInputEl.select(); });
+    quickInputEl.addEventListener('keydown', (e)=>{
+      if (e.key==='Enter') { openPalette(quickInputEl.value); }
+      if (e.key==='Escape') quickInputEl.blur();
+    });
+    quickInputEl.addEventListener('input', ()=>{ if (quickInputEl.value.length>1) openPalette(quickInputEl.value); });
+  }
+
+  // Window controls — functional
+  document.querySelector('.win-btn.minimize')?.addEventListener('click', ()=>toast('Minimize — browser window minimize (handled by OS)'));
+  document.querySelector('.win-btn.maximize')?.addEventListener('click', ()=>{
+    if (!document.fullscreenElement) { document.documentElement.requestFullscreen().catch(()=>toast('Maximize — fullscreen requested')); toast('Window maximized — F11 to exit'); }
+    else document.exitFullscreen();
+  });
+  document.querySelector('.win-btn.close')?.addEventListener('click', ()=>{
+    if (confirm('Close window? Unsaved changes may be lost.')) toast('Close — use browser tab close (Ctrl+W)');
+  });
+  // Titlebar drag region ignored for web, but we support double-click to maximize
+  document.querySelector('.titlebar')?.addEventListener('dblclick', ()=>{
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(()=>{});
+    else document.exitFullscreen();
   });
 
   // --- Toast ---
