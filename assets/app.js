@@ -1430,6 +1430,93 @@ Built with ❤️ — not affiliated with Microsoft.
   debugEvalBtn?.addEventListener('click', runDebugEval);
   debugEvalInput?.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); runDebugEval(); } if(e.key==='Escape'){ debugEvalInput.blur(); } });
 
+  // --- Extensions — Part 5: fully functional ---
+  const marketplaceExtensions = [
+    {id:'prettier', name:'Prettier', publisher:'Prettier', version:'10.1.0', rating:4.8, installs:'12M', desc:'Code formatter using prettier', recommended:true, color:'#f7b500'},
+    {id:'eslint', name:'ESLint', publisher:'Microsoft', version:'3.0.10', rating:4.7, installs:'9M', desc:'Integrates ESLint JavaScript', recommended:true, color:'#4b32c3'},
+    {id:'copilot', name:'Muse', publisher:'GitHub', version:'1.175.0', rating:4.6, installs:'15M', desc:'Your AI pair programmer', recommended:true, color:'#8957e5'},
+    {id:'gitlens', name:'GitLens', publisher:'GitKraken', version:'15.2.0', rating:4.5, installs:'8M', desc:'Supercharge Git within VS Code', recommended:false, color:'#0066b8'},
+    {id:'vscode-icons', name:'vscode-icons', publisher:'VSCode Icons Team', version:'12.10.0', rating:4.8, installs:'5M', desc:'Icons for Visual Studio Code', recommended:false, color:'#00bcd4'},
+    {id:'live-server', name:'Live Server', publisher:'Ritwick Dey', version:'5.7.9', rating:4.7, installs:'11M', desc:'Launch a local dev server with live reload', recommended:true, color:'#2ea043'},
+    {id:'tailwind', name:'Tailwind CSS IntelliSense', publisher:'Tailwind Labs', version:'0.14.0', rating:4.9, installs:'6M', desc:'Intelligent Tailwind CSS tooling', recommended:false, color:'#38bdf8'},
+  ];
+  let installed = new Set(JSON.parse(localStorage.getItem('vscode-ext-installed')||'["prettier","eslint"]'));
+  let extFilter = localStorage.getItem('vscode-ext-filter')||'all';
+  let extQuery = localStorage.getItem('vscode-ext-query')||'';
+  function saveExtensions(){ localStorage.setItem('vscode-ext-installed', JSON.stringify([...installed])); localStorage.setItem('vscode-ext-filter', extFilter); localStorage.setItem('vscode-ext-query', extQuery); }
+  function renderExtensions(){
+    const list=document.getElementById('extList');
+    const countEl=document.getElementById('extCount');
+    const searchEl=document.getElementById('extSearch');
+    if(!list) return;
+    let items=[...marketplaceExtensions];
+    if(extFilter==='installed') items=items.filter(e=>installed.has(e.id));
+    if(extFilter==='recommended') items=items.filter(e=>e.recommended);
+    if(extQuery) {
+      const q=extQuery.toLowerCase();
+      items=items.filter(e=> e.name.toLowerCase().includes(q) || e.publisher.toLowerCase().includes(q) || e.desc.toLowerCase().includes(q));
+    }
+    list.innerHTML = items.map(e=>{
+      const isInstalled=installed.has(e.id);
+      return `<div class="ext-item" data-ext="${e.id}">
+        <div class="ext-icon" style="background:${e.color}">${e.name[0]}</div>
+        <div class="ext-main"><div class="ext-name">${escapeHtml(e.name)} <span class="muted small">• ${e.publisher}</span></div><div class="ext-desc muted small">${escapeHtml(e.desc)}</div><div class="ext-meta muted small">★ ${e.rating} • ${e.installs} • v${e.version} ${isInstalled?'<span style="color:var(--accent)">● Installed</span>':''}</div></div>
+        <div class="ext-actions">
+          ${isInstalled ? `<button class="ghost-btn small" data-disable="${e.id}" title="Disable">⚙</button><button class="ghost-btn small" data-uninstall="${e.id}">Uninstall</button>` : `<button class="primary-btn small" data-install="${e.id}">Install</button>`}
+        </div>
+      </div>`;
+    }).join('') || '<div class="muted small" style="padding:12px">No extensions match</div>';
+    if(countEl) countEl.textContent = `${items.length} ${extFilter==='installed'?'installed':extFilter==='recommended'?'recommended':'marketplace'} extensions${installed.size?' • '+installed.size+' installed':''}`;
+    if(searchEl && searchEl.value!==extQuery) searchEl.value=extQuery;
+    // wire
+    list.querySelectorAll('[data-install]').forEach(b=>b.addEventListener('click', ()=>{
+      installed.add(b.dataset.install); saveExtensions(); renderExtensions(); toast(`Installed ${b.dataset.install}`); pushNotification('Extensions', `${b.dataset.install} installed`); updateExtensionBadge();
+    }));
+    list.querySelectorAll('[data-uninstall]').forEach(b=>b.addEventListener('click', ()=>{
+      installed.delete(b.dataset.uninstall); saveExtensions(); renderExtensions(); toast(`Uninstalled ${b.dataset.uninstall}`); updateExtensionBadge();
+    }));
+    list.querySelectorAll('[data-disable]').forEach(b=>b.addEventListener('click', ()=> toast(`Extension ${b.dataset.disable} settings — enable/disable (demo)`)));
+    list.querySelectorAll('.ext-item').forEach(el=>{
+      el.addEventListener('click', (e)=>{ if(e.target.closest('button')) return; toast(`${el.dataset.ext} — click Install to add`); });
+    });
+    // update sidebar badge 0
+    updateExtensionBadge();
+  }
+  function updateExtensionBadge(){
+    const badge=document.querySelector('.activity-btn[data-view="extensions"] .activity-badge');
+    if(badge){ badge.textContent=String(installed.size); badge.hidden=false; badge.style.display=''; }
+  }
+  document.getElementById('extSearch')?.addEventListener('input', (e)=>{ extQuery=e.target.value; saveExtensions(); renderExtensions(); });
+  document.querySelectorAll('.ext-tab').forEach(t=>{
+    t.addEventListener('click', ()=>{
+      extFilter=t.dataset.filter; saveExtensions();
+      document.querySelectorAll('.ext-tab').forEach(x=>x.classList.remove('is-active'));
+      t.classList.add('is-active');
+      renderExtensions();
+    });
+  });
+  // restore active tab
+  setTimeout(()=>{
+    document.querySelectorAll('.ext-tab').forEach(t=>{ t.classList.toggle('is-active', t.dataset.filter===extFilter); });
+    renderExtensions();
+  }, 600);
+  // extFilterBtn quick picks
+  document.getElementById('extFilterBtn')?.addEventListener('click', ()=>{
+    showContextMenu(window.innerWidth/2, 120, [
+      {label:'Show All', action:()=>{ extFilter='all'; saveExtensions(); renderExtensions(); document.querySelectorAll('.ext-tab').forEach(x=>x.classList.remove('is-active')); document.querySelector('[data-filter="all"]').classList.add('is-active'); }},
+      {label:'Show Installed', action:()=>{ extFilter='installed'; saveExtensions(); renderExtensions(); document.querySelectorAll('.ext-tab').forEach(x=>x.classList.remove('is-active')); document.querySelector('[data-filter="installed"]').classList.add('is-active'); }},
+      {label:'Show Recommended', action:()=>{ extFilter='recommended'; saveExtensions(); renderExtensions(); document.querySelectorAll('.ext-tab').forEach(x=>x.classList.remove('is-active')); document.querySelector('[data-filter="recommended"]').classList.add('is-active'); }},
+      {type:'sep'},
+      {label:'Clear & Reload', action:()=>{ installed=new Set(['prettier','eslint']); saveExtensions(); renderExtensions(); toast('Extensions reset'); }},
+    ]);
+  });
+  // Accounts & Remote functional
+  document.getElementById('connectRemoteBtn')?.addEventListener('click', ()=>{ toast('Connecting to Remote — enter host in palette'); showPicker([{label:'WSL: Ubuntu — Connect', action:()=>toast('Connected to WSL: Ubuntu')},{label:'SSH: dev-server — Add Host', action:()=>{ const h=prompt('SSH host:'); if(h) toast(`SSH ${h} added`);}}], 'Remote'); });
+  document.querySelector('[data-view-panel="accounts"] .primary-btn')?.addEventListener('click', ()=>{
+    const btn=document.querySelector('[data-view-panel="accounts"] .primary-btn');
+    if(btn.textContent.includes('Sign in')){ btn.textContent='Signed in as you@github.com ✓'; toast('Signed in — sync enabled'); pushNotification('Accounts', 'GitHub account connected — Settings Sync enabled'); } else { btn.textContent='Sign in with GitHub'; toast('Signed out'); }
+  });
+
   // Patch terminalLog to also mirror to Output for git/npm
   // (defined after terminal, so we intercept later)
   document.querySelectorAll('.panel-tab').forEach(tab => {

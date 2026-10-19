@@ -551,6 +551,20 @@ code { font-family: var(--font-mono); font-size: 12px; }
 .manage-item:hover { background: var(--bg-hover); }
 
 /* Panel views */
+.ext-item { display:flex; gap:10px; align-items:center; padding:10px 12px; border-bottom:1px solid var(--border-subtle); }
+.ext-item:hover{ background:var(--bg-list-hover); }
+.ext-icon { width:36px; height:36px; border-radius:6px; display:flex; align-items:center; justify-content:center; color:white; font-weight:700; flex-shrink:0; }
+.ext-main{ flex:1; min-width:0; }
+.ext-name{ font-weight:600; font-size:13px; }
+.ext-desc{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ext-meta{ margin-top:2px; }
+.ext-actions{ display:flex; gap:6px; }
+.ext-tabs{ display:flex; gap:18px; padding:8px 12px; border-bottom:1px solid var(--border-subtle); font-size:12px; }
+.ext-tab{ background:none; border:none; color:var(--fg-muted); cursor:pointer; padding-bottom:4px; border-bottom:2px solid transparent; }
+.ext-tab.is-active{ color:var(--fg); border-bottom-color:var(--accent); }
+.manage-view{ display:flex; flex-direction:column; gap:4px; padding:12px; }
+.manage-item{ background:none; border:none; text-align:left; padding:8px 10px; border-radius:4px; color:var(--fg); cursor:pointer; }
+.manage-item:hover{ background:var(--bg-list-hover); }
 .bp-glyph { background: var(--error); border-radius: 50%; width: 12px !important; height: 12px !important; margin-left: 4px; margin-top: 4px; display: inline-block; }
 .debug-current-line { background: rgba(255,204,0,0.15); border-left: 3px solid #ffcc00; }
 .scm-hash { font-family: var(--font-mono); color: var(--accent); font-weight: 600; }
