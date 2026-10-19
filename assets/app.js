@@ -1865,35 +1865,37 @@ Built with ❤️ — not affiliated with Microsoft.
     return out;
   }
   function findFileSmart(input){
-    // try direct resolve, then search all files by exact path or basename
     let p = resolvePath(input);
     let n = findNode(p);
     if(n && n.type==='file') return {node:n, path:p};
-    // strip ./ prefix
     if(input.startsWith('./')) { n=findNode(resolvePath(input.slice(2))); if(n) return {node:n, path:resolvePath(input.slice(2))}; }
-    // search by basename anywhere
     let all=getAllFiles();
     let base=input.split('/').pop();
     let cand=all.find(f=> f.path===input || f.name===base || f.path.endsWith('/'+base) || f.path===base);
     if(cand) return {node:cand, path:cand.path};
-    // case insensitive
     cand=all.find(f=> f.name.toLowerCase()===base.toLowerCase());
     if(cand) return {node:cand, path:cand.path};
     return {node:null, path:p};
   }
-  function doCompile(args, compiler){
-    let src=null, out='a.out', hasO=false;
+  // --- Real compiler via backend /api/exec (g++ 12.2) — falls back to simulator if offline ---
+  async function realExec(code, language, stdin, filename, out){
+    try{
+      const r=await fetch('/api/exec',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({code, language, stdin: stdin||'', filename, out})});
+      const data=await r.json();
+      return data;
+    }catch(e){ return null; }
+  }
+  function needsStdin(code){
+    return /cin\s*>>|scanf\s*\(|getchar|gets\s*\(|read\s*\(/.test(code);
+  }
+  async function doCompile(args, compiler){
+    let src=null, out='a.out';
     for(let i=0;i<args.length;i++){
       let a=args[i];
-      if(a==='-o' && args[i+1]){ out=args[i+1]; hasO=true; i++; continue; }
-      if(a.endsWith('.cpp')||a.endsWith('.c')||a.endsWith('.cc')||a.endsWith('.cxx')||a.endsWith('.C')){
-        src=a;
-      }
+      if(a==='-o' && args[i+1]){ out=args[i+1]; i++; continue; }
+      if(a.endsWith('.cpp')||a.endsWith('.c')||a.endsWith('.cc')||a.endsWith('.cxx')||a.endsWith('.C')) src=a;
     }
-    if(!src){
-      // allow `g++ ankit.cpp` where ankit.cpp might be without extension typo? try first arg as file
-      if(args[0] && !args[0].startsWith('-')) src=args[0];
-    }
+    if(!src && args[0] && !args[0].startsWith('-')) src=args[0];
     if(!src){ terminalLog(`${compiler}: fatal error: no input files — try: ${compiler} ankit.cpp -o ankit`); return; }
     let found=findFileSmart(src);
     let node=found.node, srcPath=found.path;
@@ -1901,34 +1903,64 @@ Built with ❤️ — not affiliated with Microsoft.
       terminalLog(`${compiler}: ${src}: No such file or directory (cwd: ${cwd||'/'} → tried ${resolvePath(src)})`);
       let avail=getAllFiles().filter(f=>f.name.endsWith('.cpp')||f.name.endsWith('.c')).map(f=>f.path).join(', ');
       terminalLog(avail ? `hint: .cpp/.c files: ${avail}` : 'hint: create a file first — Explorer → New File → ankit.cpp');
-      if(allFilesHint()) terminalLog('tip: use ls to see files, ls src to see src folder');
       return;
     }
+    let language = srcPath.endsWith('.c') ? 'c' : 'cpp';
+    // if compiler mismatched, still respect file extension (g++ can compile .c)
+    if(compiler==='gcc' && srcPath.endsWith('.cpp')) language='cpp';
     terminalLog(`[${compiler}] compiling ${srcPath} → ${out} ...`);
-    if(!node.content.includes('main')) terminalLog(`warning: no 'main' in ${srcPath} — compiled anyway`);
-    // allow .cpp compiled with gcc and vice versa — still simulate
-    compiledBinaries[out]=srcPath;
-    compiledBinaries['./'+out]=srcPath;
-    let base=out.split('/').pop();
-    compiledBinaries[base]=srcPath;
-    if(out==='a.out') compiledBinaries['a.out']=srcPath;
-    terminalLog(`✔ built ${out} from ${srcPath}`);
-    // auto-run so single command shows output (user expectation) — reset cin cache per run
+    // gather stdin if program expects input
+    let stdin='';
+    if(needsStdin(node.content)){
+      let vars=[...collectCinVars(node.content)];
+      if(vars.length){
+        let msg = vars.length===1 ? `Input needed for '${vars[0]}' (cin>>${vars[0]}). Enter value:` : `Input needed for ${vars.join(', ')} (cin). Enter values space-separated in order:`;
+        let def = vars.map((_,i)=> String(i===0?5: i===1?10: 3)).join(' ');
+        let ans = prompt(msg, def);
+        if(ans!==null) stdin = ans.split(/\s+/).join('\n');
+        if(stdin) terminalLog(`⌨ stdin: ${stdin.replace(/\n/g,' ')}`);
+      } else {
+        let ans = prompt('Program uses cin/scanf — enter stdin (space/newline separated):','5');
+        if(ans!==null) stdin=ans;
+      }
+    }
+    // try real backend first
+    let data = await realExec(node.content, language, stdin, srcPath, out);
+    if(data){
+      if(!data.success){
+        terminalLog(`❌ ${compiler} failed:`);
+        terminalLog(data.compileError || data.error || 'compile error');
+        return;
+      }
+      // store for ./ runs
+      compiledBinaries[out]=srcPath;
+      compiledBinaries['./'+out]=srcPath;
+      compiledBinaries[srcPath]=srcPath;
+      let base=out.split('/').pop();
+      compiledBinaries[base]=srcPath;
+      window.__lastStdin = window.__lastStdin||{};
+      window.__lastStdin[out]=stdin;
+      window.__lastStdin['./'+out]=stdin;
+      terminalLog(`✔ built ${out} from ${srcPath}`);
+      if(data.stdout) data.stdout.split('\n').forEach(l=> terminalLog(l));
+      if(data.stderr) terminalLog(data.stderr);
+      if(!data.stdout && !data.stderr) terminalLog('(no output — program ran successfully)');
+      terminalLog(`[exit ${data.exitCode}] — run again with ./${out}`);
+      return;
+    }
+    // fallback to old simulator if fetch failed (offline)
+    terminalLog('⚠ backend unreachable — using simulator fallback');
     window.__cinInputs={};
-    terminalLog(`▶ running ${out} ...`);
-    try{
-      let outputs=[];
-      if(srcPath.endsWith('.cpp')||srcPath.endsWith('.cc')||srcPath.endsWith('.cxx')) outputs=simulateCppOutput(node.content);
-      else if(srcPath.endsWith('.c')) outputs=simulateCOutput(node.content);
-      else if(srcPath.endsWith('.py')) outputs=simulatePythonOutput(node.content);
-      outputs.forEach(l=>terminalLog(l));
-      terminalLog(`[exit 0] — also run later with ./${out}`);
-    }catch(e){ terminalLog('runtime error: '+e.message); }
+    let outputs=[];
+    if(srcPath.endsWith('.cpp')||srcPath.endsWith('.cc')||srcPath.endsWith('.cxx')) outputs=simulateCppOutput(node.content);
+    else if(srcPath.endsWith('.c')) outputs=simulateCOutput(node.content);
+    else outputs=[node.content.slice(0,500)];
+    compiledBinaries[out]=srcPath; compiledBinaries['./'+out]=srcPath;
+    terminalLog(`✔ built ${out} (simulated)`);
+    outputs.forEach(l=>terminalLog(l));
   }
-  function allFilesHint(){
-    try{ return getAllFiles().length>0; }catch{return false;}
-  }
-  function doRunBinary(raw){
+  function allFilesHint(){ try{ return getAllFiles().length>0; }catch{return false;}}
+  async function doRunBinary(raw){
     let parts=raw.trim().split(/\s+/);
     let bin=parts[0];
     let binName=bin.slice(2);
@@ -1938,9 +1970,8 @@ Built with ❤️ — not affiliated with Microsoft.
       let node=findNode(tryPath);
       if(node && (tryPath.endsWith('.cpp')||tryPath.endsWith('.c')||tryPath.endsWith('.cc')||tryPath.endsWith('.py')||tryPath.endsWith('.js'))){
         srcPath=tryPath;
-        terminalLog(`(running ${binName} directly — for C/C++ prefer: g++ ${binName} -o ${binName.split('.')[0]} && ./${binName.split('.')[0]})`);
       } else {
-        terminalLog(`bash: ${bin}: No such file — compile first: g++ main.cpp -o main  (or gcc main.c -o main)`);
+        terminalLog(`bash: ${bin}: No such file — compile first: g++ main.cpp -o main`);
         let avail=Object.keys(compiledBinaries).filter(k=>!k.startsWith('./')).join(', ');
         if(avail) terminalLog(`available binaries: ${avail}`);
         return;
@@ -1948,16 +1979,55 @@ Built with ❤️ — not affiliated with Microsoft.
     }
     let node=findNode(srcPath);
     if(!node){ terminalLog(`error: source ${srcPath} missing`); return; }
-    let outputs=[];
-    if(srcPath.endsWith('.cpp')||srcPath.endsWith('.cc')||srcPath.endsWith('.cxx')) outputs=simulateCppOutput(node.content);
-    else if(srcPath.endsWith('.c')) outputs=simulateCOutput(node.content);
-    else if(srcPath.endsWith('.py')) outputs=simulatePythonOutput(node.content);
-    else if(srcPath.endsWith('.js')) {
-      let logs=[...node.content.matchAll(/console\.log\(([^)]+)\)/g)].map(m=>m[1]);
-      outputs=logs.length? logs : ['(no console.log)'];
-    } else outputs=[node.content.slice(0,500)];
-    terminalLog(`▶ ${bin} (${srcPath})`);
-    outputs.forEach(l=>terminalLog(l));
+    let language = srcPath.endsWith('.c') ? 'c' : srcPath.endsWith('.cpp')||srcPath.endsWith('.cc') ? 'cpp' : srcPath.endsWith('.py') ? 'python' : 'cpp';
+    if(language==='python'){
+      try{ simulatePythonOutput(node.content).forEach(l=>terminalLog(l)); }catch{}
+      return;
+    }
+    if(language==='js'){
+      terminalLog(`▶ ${bin} (${srcPath})`);
+      let logs=[...node.content.matchAll(/console\.log\(([^)]+)\)/g)].map(m=>m[1].trim());
+      if(logs.length) logs.forEach(l=>terminalLog(l)); else terminalLog('(no console.log)');
+      return;
+    }
+    // real run via backend /api/run (cached binary) or fallback to /api/exec
+    let stdin = (window.__lastStdin && (window.__lastStdin[binName] || window.__lastStdin[bin])) || '';
+    // if program needs input and we have no stdin, ask again
+    if(!stdin && needsStdin(node.content)){
+      let vars=[...collectCinVars(node.content)];
+      let ans = prompt(`Run ./${binName} needs input for ${vars.join(', ')||'stdin'}. Enter:`, vars.length? vars.map((_,i)=>String(i===0?5:10)).join(' '): '5');
+      if(ans!==null) stdin=ans.split(/\s+/).join('\n');
+    }
+    try{
+      // try /api/run first (uses cached binary)
+      let r=await fetch('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({out: binName.split('/').pop(), stdin})});
+      let data=await r.json();
+      if(data.success || data.stdout!==undefined){
+        terminalLog(`▶ ${bin} (${srcPath})`);
+        if(data.stdout) data.stdout.split('\n').forEach(l=>terminalLog(l));
+        if(data.stderr) terminalLog(data.stderr);
+        if(!data.stdout && !data.stderr) terminalLog('(no output)');
+        terminalLog(`[exit ${data.exitCode}]`);
+        return;
+      } else throw new Error(data.error||'run failed');
+    }catch(e){
+      // fallback: re-exec via /api/exec
+      let data = await realExec(node.content, language, stdin, srcPath, binName);
+      if(data && data.success){
+        terminalLog(`▶ ${bin} (${srcPath})`);
+        if(data.stdout) data.stdout.split('\n').forEach(l=>terminalLog(l));
+        if(data.stderr) terminalLog(data.stderr);
+        terminalLog(`[exit ${data.exitCode}]`);
+        return;
+      }
+      // ultimate fallback simulator
+      window.__cinInputs={};
+      let outputs=[];
+      if(srcPath.endsWith('.cpp')) outputs=simulateCppOutput(node.content);
+      else if(srcPath.endsWith('.c')) outputs=simulateCOutput(node.content);
+      terminalLog(`▶ ${bin} (${srcPath}) [simulated]`);
+      outputs.forEach(l=>terminalLog(l));
+    }
   }
 
   const commands = {
