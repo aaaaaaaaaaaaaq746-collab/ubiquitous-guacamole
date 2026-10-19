@@ -551,6 +551,17 @@ code { font-family: var(--font-mono); font-size: 12px; }
 .manage-item:hover { background: var(--bg-hover); }
 
 /* Panel views */
+.bp-glyph { background: var(--error); border-radius: 50%; width: 12px !important; height: 12px !important; margin-left: 4px; margin-top: 4px; display: inline-block; }
+.debug-current-line { background: rgba(255,204,0,0.15); border-left: 3px solid #ffcc00; }
+.scm-hash { font-family: var(--font-mono); color: var(--accent); font-weight: 600; }
+.scm-commit-item { padding: 4px 8px; border-bottom: 1px solid var(--border-subtle); font-size: 12px; }
+.scm-commit-item:hover { background: var(--bg-list-hover); }
+.branch-item { padding: 4px 8px; font-size: 12px; cursor: pointer; }
+.branch-item.is-active { background: var(--bg-active); color: var(--fg-bright); }
+.diff-line { font-family: var(--font-mono); font-size: 12px; white-space: pre; padding: 0 8px; line-height: 18px; }
+.diff-line.add { background: rgba(46,160,67,0.15); color: #7ee787; }
+.diff-line.rem { background: rgba(248,81,73,0.15); color: #ff7b72; }
+.diff-line.ctx { color: var(--fg-muted); }
 .panel-view { display: none; flex: 1; min-height: 0; overflow: auto; }
 .panel-view.is-active { display: flex; flex-direction: column; }
 .panel-toolbar { display: flex; align-items: center; gap: 8px; padding: 4px 12px; border-bottom: 1px solid var(--border-subtle); font-size: 11px; }

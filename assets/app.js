@@ -1454,9 +1454,128 @@ Built with ❤️ — not affiliated with Microsoft.
   // keyboard Ctrl+J already handled
   // close/maximize actions already handled in status bar section
 
-  // --- Terminal ---
-  const terminalOutput = document.getElementById('terminalOutput');
-  const terminalInput = document.getElementById('terminalInput');
+  // --- Debug — Part 4a: breakpoints & run ---
+  let breakpoints = JSON.parse(localStorage.getItem('vscode-breakpoints')||'{}'); // {path: [line]}
+  let debugActive=false, debugLine=null;
+  function saveBreakpoints(){ localStorage.setItem('vscode-breakpoints', JSON.stringify(breakpoints)); }
+  function toggleBreakpoint(path, line){
+    if (!breakpoints[path]) breakpoints[path]=[];
+    const idx=breakpoints[path].indexOf(line);
+    if(idx===-1) { breakpoints[path].push(line); toast(`Breakpoint added ${path}:${line}`); }
+    else { breakpoints[path].splice(idx,1); if(!breakpoints[path].length) delete breakpoints[path]; toast(`Breakpoint removed ${path}:${line}`); }
+    if(!breakpoints[path]?.length) delete breakpoints[path];
+    saveBreakpoints(); renderBreakpoints(); updateBreakpointDecorations();
+  }
+  function renderBreakpoints(){
+    const list=document.getElementById('breakpointsList');
+    const countEl=document.getElementById('bpCount');
+    if(!list) return;
+    const entries=[];
+    for(const [p,lines] of Object.entries(breakpoints)) for(const l of lines) entries.push({path:p, line:l});
+    if(countEl) countEl.textContent=entries.length;
+    if(!entries.length){ list.innerHTML='<div class="muted small" style="padding:6px">No breakpoints — click gutter to add</div>'; return; }
+    list.innerHTML=entries.map(e=>`<div class="scm-item" data-bp="${e.path}:${e.line}"><span style="color:var(--error)">●</span><span style="flex:1">${e.path}:${e.line}</span><button class="icon-btn small" data-remove-bp="${e.path}:${e.line}" title="Remove">✕</button></div>`).join('');
+    list.querySelectorAll('[data-remove-bp]').forEach(b=>b.addEventListener('click', ()=>{
+      const [p,l]=b.dataset.removeBp.split(':'); toggleBreakpoint(p, parseInt(l));
+    }));
+    list.querySelectorAll('.scm-item').forEach(el=>{
+      el.addEventListener('click', ()=>{ const [p,l]=el.dataset.bp.split(':'); openFile(p); setTimeout(()=>{ if(monacoEditor) monacoEditor.revealLineInCenter(parseInt(l)); },100); });
+    });
+  }
+  function updateBreakpointDecorations(){
+    if(!monacoEditor || !activePath) return;
+    const lines = breakpoints[activePath]||[];
+    // clear old
+    if(window._bpDecorations) monacoEditor.deltaDecorations(window._bpDecorations, []);
+    if(!lines.length){ window._bpDecorations=[]; return; }
+    window._bpDecorations = monacoEditor.deltaDecorations([], lines.map(line=>({
+      range: new monaco.Range(line,1,line,1),
+      options: { isWholeLine:true, glyphMarginClassName:'bp-glyph', glyphMarginHoverMessage:{value: `Breakpoint at ${activePath}:${line}`}}
+    })));
+  }
+  // hook gutter click after Monaco created
+  function setupDebugGutter(){
+    if(!monacoEditor) return;
+    monacoEditor.onMouseDown(e=>{
+      if(e.target.type===2 /* glyph margin */ || e.target.type===3){
+        const line=e.target.position?.lineNumber;
+        if(line) toggleBreakpoint(activePath, line);
+      }
+    });
+  }
+  // Start debugging simulation
+  let debugStepTimer=null;
+  document.getElementById('startDebugBtn')?.addEventListener('click', startDebugging);
+  document.getElementById('runWithoutDebugBtn')?.addEventListener('click', ()=>{
+    const node=findNode(activePath); if(node && activePath.endsWith('.js')) commands.node([activePath]); else toast('Run — no JS file open');
+  });
+  function startDebugging(){
+    if(!activePath){ toast('Open a file to debug'); return; }
+    const bps=breakpoints[activePath]||[];
+    if(!bps.length){ toast('No breakpoints — adding at line 5 for demo'); toggleBreakpoint(activePath, 5); }
+    debugActive=true;
+    const dbgVars=document.getElementById('debugVariables');
+    const callStack=document.getElementById('callStack');
+    const dbgConsole=document.getElementById('debugConsole');
+    dbgVars.innerHTML='<div style="padding:6px"><strong>greet</strong> = <code>function</code><br><strong>name</strong> = <code>"Developer"</code><br><strong>Editor</strong> = <code>class</code></div>';
+    callStack.innerHTML=`<div class="scm-item"><span>${activePath}:5</span><span class="muted small">greet()</span></div><div class="scm-item"><span>${activePath}:1</span><span class="muted small">&lt;anonymous&gt;</span></div>`;
+    dbgConsole.innerHTML='<div class="muted small">Debugger started — paused at breakpoint</div>';
+    // highlight line
+    const firstBP = (breakpoints[activePath]||[5])[0];
+    if(monacoEditor){ monacoEditor.revealLineInCenter(firstBP); monacoEditor.setPosition({lineNumber:firstBP, column:1}); // add decoration for current line
+      window._debugLineDecor = monacoEditor.deltaDecorations(window._debugLineDecor||[], [{range: new monaco.Range(firstBP,1,firstBP,1000), options:{isWholeLine:true, className:'debug-current-line', overviewRuler:{color:'#ffcc00', position:4}}}]);
+    }
+    showPanelView('debugcons');
+    outputContent.textContent = outputLogs['Tasks'] + '\n[Debug] Started — breakpoint hit at '+activePath+':'+firstBP+'\n';
+    debugLine=firstBP;
+    // step simulation
+    toast(`Debugging ${activePath} — paused at ${firstBP}. Use Continue/Step`);
+    // watch evaluation already hooked
+  }
+  // Watch
+  document.getElementById('addWatchBtn')?.addEventListener('click', ()=>{
+    const expr=document.getElementById('watchInput').value.trim();
+    if(!expr) return;
+    const list=document.getElementById('watchList');
+    let val;
+    try{ const fn=new Function(`return (${expr})`); val=String(fn()); } catch(e){ val='Error: '+e.message; }
+    const item=document.createElement('div'); item.className='scm-item'; item.innerHTML=`<span>${escapeHtml(expr)}</span><span class="muted small" style="margin-left:auto">${escapeHtml(val).slice(0,30)}</span><button class="icon-btn small" title="Remove">✕</button>`;
+    item.querySelector('button').addEventListener('click', ()=>item.remove());
+    list.appendChild(item);
+    document.getElementById('watchInput').value='';
+  });
+  // extend createMonacoEditor to call setupDebugGutter
+  const _origCreateMonaco = createMonacoEditor;
+  // will patch after definition — hook inside original create via setTimeout
+  setTimeout(()=>{ if(monacoEditor) setupDebugGutter(); }, 1500);
+  // update decorations on file open
+  const _origLoadIntoEditorForDebug = loadIntoEditor;
+  const origLoad = loadIntoEditor;
+  // wrap via setInterval check
+  setInterval(()=>{ if(activePath) updateBreakpointDecorations(); }, 1000);
+  setTimeout(renderBreakpoints, 800);
+
+  // --- Terminal — Part 4b: shell with cwd ---
+  // Need cwd state
+  let cwd = ''; // '' = root
+  function resolvePath(input, base=cwd){
+    if(!input) return base;
+    if(input.startsWith('/')) return input.slice(1);
+    if(input==='.') return base;
+    if(input==='..') return base.includes('/') ? base.slice(0, base.lastIndexOf('/')) : '';
+    if(input.startsWith('../')) { // simple
+      let b=base;
+      while(input.startsWith('../')){ b=b.includes('/')?b.slice(0,b.lastIndexOf('/')):''; input=input.slice(3); }
+      return b ? b+'/'+input : input;
+    }
+    // relative
+    if(!base) return input;
+    return base ? base + '/' + input : input;
+  }
+  function updateTermCwdUI(){
+    const el=document.getElementById('termCwd');
+    if(el) el.textContent = cwd ? '~/'+cwd : '~/ubiquitous-guacamole';
+  }
   function terminalLog(text, type='info') {
     const line = document.createElement('div');
     line.className = 'term-line';
@@ -1476,23 +1595,25 @@ Built with ❤️ — not affiliated with Microsoft.
   const commands = {
     help: () => terminalLog(`Available commands:
   help            Show this help
-  ls [path]       List files
-  cat <file>      Show file content
-  clear           Clear terminal
-  pwd             Show current directory
+  ls [-l] [-R] [path] List files (supports cwd, -R recursive)
+  cd <dir>        Change directory (.. /)
+  cat <file>      Show file content (respects cwd)
+  pwd             Show current directory (with cwd)
   echo <text>     Echo text
   date            Show date
   whoami          Show user
-  npm <args>      Simulate npm
-  node <file>     Run JS file (mock)
-  git status      Show git status
-  code <file>     Open file in editor
+  clear           Clear terminal
+  npm <args>      Simulate npm (install / run dev)
+  node <file>     Run JS file — shows console.log lines
+  git status/log  Simulated git (see SCM panel)
+  code/open <file> Open file (supports cwd relative)
   mkdir <name>    Create folder
   touch <name>    Create file
   rm <file>       Delete file
+  grep <pat> <file> Search pattern in file
+  find <name>     Find files by name
   preview <html>  Live preview HTML
   theme           Toggle theme
-  open <file>     Open file
 `),
     ls: (args) => {
       const path = args[0] || '';
@@ -1549,40 +1670,38 @@ Built with ❤️ — not affiliated with Microsoft.
         terminalLog('  untracked:  README.md');
       } else terminalLog(`git ${args.join(' ')} — simulated`);
     },
-    code: (args) => { if (args[0]) openFile(args[0]); else terminalLog('code: missing file operand'); },
-    open: (args) => { if (args[0]) openFile(args[0]); else terminalLog('open: missing file'); },
+    code: (args) => { if (args[0]) { const p=resolvePath(args[0]); openFile(p); } else terminalLog('code: missing file operand'); },
+    open: (args) => { if (args[0]) { const p=resolvePath(args[0]); openFile(p); } else terminalLog('open: missing file'); },
     mkdir: (args) => {
       if (!args[0]) { terminalLog('mkdir: missing operand'); return; }
-      const name = args[0];
+      const name = resolvePath(args[0]);
       if (findNode(name)) { terminalLog(`mkdir: cannot create directory ‘${name}’: File exists`); return; }
-      const { parent, name: base, parentPath } = findParent(name);
+      const { parent, name: base } = findParent(name);
       const p = parent || fsRoot;
       if (!p) { terminalLog('mkdir: invalid path'); return; }
-      const newPath = name;
-      p.children.push({ name: base, type: 'folder', path: newPath, children: [] });
-      expanded.add(newPath);
-      saveFS(); renderTree();
-      terminalLog(`created directory ${name}`);
+      p.children.push({ name: base, type: 'folder', path: name, children: [] });
+      expanded.add(name);
+      saveFS(); renderTree(); terminalLog(`created directory ${name}`); renderSCM();
     },
     touch: (args) => {
       if (!args[0]) { terminalLog('touch: missing file operand'); return; }
-      const name = args[0];
+      const name = resolvePath(args[0]);
       if (findNode(name)) { terminalLog(`touch: ${name} already exists`); return; }
       const { parent, name: base } = findParent(name);
       const p = parent || fsRoot;
       p.children.push({ name: base, type: 'file', path: name, content: '' });
-      saveFS(); renderTree();
-      terminalLog(`created file ${name}`);
+      saveFS(); renderTree(); terminalLog(`created file ${name}`); renderSCM();
     },
     rm: (args) => {
       if (!args[0]) { terminalLog('rm: missing operand'); return; }
-      const node = findNode(args[0]);
+      const name = resolvePath(args[0]);
+      const node = findNode(name);
       if (!node) { terminalLog(`rm: cannot remove '${args[0]}': No such file`); return; }
-      deletePath(args[0]);
-      terminalLog(`removed ${args[0]}`);
+      deletePath(name);
+      terminalLog(`removed ${name}`);
     },
     preview: (args) => {
-      const path = args[0] || 'src/index.html';
+      const path = args[0] ? resolvePath(args[0]) : 'src/index.html';
       const node = findNode(path);
       if (!node) { terminalLog(`preview: ${path} not found`); return; }
       showPreview(path);
@@ -1593,7 +1712,65 @@ Built with ❤️ — not affiliated with Microsoft.
       document.documentElement.setAttribute('data-theme', next);
       localStorage.setItem('vscode-theme', next);
       terminalLog(`Theme switched to ${next}`);
-    }
+    },
+    cd: (args) => {
+      if (!args[0]) { cwd=''; updateTermCwdUI(); terminalLog('/'); return; }
+      let target=resolvePath(args[0]);
+      if(args[0]==='..') target = cwd.includes('/') ? cwd.slice(0, cwd.lastIndexOf('/')) : '';
+      else if(args[0]==='/') target='';
+      const node=findNode(target);
+      if(!node) { terminalLog(`cd: ${args[0]}: No such file or directory`); return; }
+      if(node.type!=='folder'){ terminalLog(`cd: ${args[0]}: Not a directory`); return; }
+      cwd=target; updateTermCwdUI(); terminalLog('');
+    },
+    ls: (args) => {
+      // override earlier ls to support cwd and -R, -la
+      let path=cwd;
+      let flags=[];
+      for(const a of args){ if(a.startsWith('-')) flags.push(a); else path=resolvePath(a); }
+      const node= path ? findNode(path) : findNode(cwd) || fsRoot;
+      if(!node){ terminalLog(`ls: cannot access '${path}': No such file`); return; }
+      if(node.type==='file'){ terminalLog(node.name); return; }
+      const entries=node.children||[];
+      if(!entries.length){ terminalLog('(empty)'); return; }
+      for(const e of entries){
+        let line=`${e.type==='folder'?'d':'-'} ${e.name}${e.type==='folder'?'/':''}`;
+        if(flags.includes('-l')||flags.includes('-la')) line=`${e.type==='folder'?'drwxr-xr-x':'-rw-r--r--'} 1 user user  ${e.type==='file'? e.content.length : 4096} Oct 19  ${e.name}`;
+        terminalLog(line);
+      }
+      if(flags.includes('-R')){
+        for(const e of entries.filter(x=>x.type==='folder')){
+          terminalLog(`\n${e.path}:`);
+          const sub=findNode(e.path);
+          if(sub?.children) for(const ch of sub.children) terminalLog(`${ch.type==='folder'?'d':'-'} ${ch.name}`);
+        }
+      }
+    },
+    grep: (args) => {
+      if(args.length<2){ terminalLog('grep: usage: grep <pattern> <file>'); return; }
+      const pat=args[0], file=resolvePath(args[1]);
+      const node=findNode(file);
+      if(!node||node.type!=='file'){ terminalLog(`grep: ${file}: No such file`); return; }
+      let rx; try{ rx=new RegExp(pat, 'i'); } catch{ rx=new RegExp(pat.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'i'); }
+      const lines=node.content.split('\n');
+      let found=false;
+      lines.forEach((l,i)=>{ if(rx.test(l)){ terminalLog(`${file}:${i+1}:${l.trim()}`); found=true; }});
+      if(!found) terminalLog(`(no matches for "${pat}" in ${file})`);
+    },
+    find: (args) => {
+      const name=args[0]?.replace('*.','') || '';
+      const files=getAllFiles().filter(f=>!name || f.name.includes(name) || f.path.includes(name));
+      if(!files.length) terminalLog('(no files found)'); else files.forEach(f=>terminalLog(f.path));
+    },
+    cat: (args) => {
+      if (!args[0]) { terminalLog('cat: missing operand'); return; }
+      const p=resolvePath(args[0]);
+      const node = findNode(p);
+      if (!node) { terminalLog(`cat: ${p}: No such file`); return; }
+      if (node.type === 'folder') { terminalLog(`cat: ${p}: Is a directory`); return; }
+      terminalLog(node.content);
+    },
+    pwd: () => { terminalLog('/home/user/ubiquitous-guacamole' + (cwd? '/'+cwd : '')); },
   };
 
   terminalInput.addEventListener('keydown', (e) => {
@@ -2429,7 +2606,24 @@ Built with ❤️ — not affiliated with Microsoft.
     reader.readAsText(file);
   });
 
+  // Key: F5 start debugging
+  document.addEventListener('keydown', (e)=>{
+    if(e.key==='F5'){ e.preventDefault(); startDebugging(); }
+    if(e.key==='F5' && e.shiftKey){ e.preventDefault(); debugActive=false; toast('Debugging stopped'); if(window._debugLineDecor) monacoEditor.deltaDecorations(window._debugLineDecor, []); }
+  });
+  // debug toolbar continue/stop
+  const dbgToolbar = document.querySelector('[data-panel-view="debugcons"] .problems-toolbar');
+  if(dbgToolbar && !document.getElementById('debugContinueBtn')){
+    const cont=document.createElement('button'); cont.id='debugContinueBtn'; cont.className='icon-btn small'; cont.title='Continue (F5)'; cont.textContent='▶';
+    const stop=document.createElement('button'); stop.id='debugStopBtn'; stop.className='icon-btn small'; stop.title='Stop'; stop.textContent='■';
+    const step=document.createElement('button'); step.id='debugStepBtn'; step.className='icon-btn small'; step.title='Step Over (F10)'; step.textContent='⤵';
+    dbgToolbar.appendChild(cont); dbgToolbar.appendChild(step); dbgToolbar.appendChild(stop);
+    cont.addEventListener('click', ()=>{ if(!debugActive) startDebugging(); else { const lines=breakpoints[activePath]||[]; let idx=lines.indexOf(debugLine); let next=lines[(idx+1)%lines.length]||lines[0]; if(next){ debugLine=next; monacoEditor.revealLineInCenter(next); if(window._debugLineDecor) monacoEditor.deltaDecorations(window._debugLineDecor, []); window._debugLineDecor=monacoEditor.deltaDecorations([], [{range:new monaco.Range(next,1,next,1000), options:{isWholeLine:true, className:'debug-current-line'}}]); toast(`Continued to ${activePath}:${next}`);} } });
+    stop.addEventListener('click', ()=>{ debugActive=false; if(window._debugLineDecor) monacoEditor.deltaDecorations(window._debugLineDecor, []); toast('Debug stopped'); });
+    step.addEventListener('click', ()=>{ if(!debugActive){ toast('Start debugging first (F5)'); return; } let next=debugLine+1; debugLine=next; monacoEditor.revealLineInCenter(next); if(window._debugLineDecor) monacoEditor.deltaDecorations(window._debugLineDecor, []); window._debugLineDecor=monacoEditor.deltaDecorations([], [{range:new monaco.Range(next,1,next,1000), options:{isWholeLine:true, className:'debug-current-line'}}]); toast(`Stepped to line ${next}`); });
+  }
+  updateTermCwdUI();
   // Expose for debugging
-  window.vscode = { openFile, createNew, deletePath, findNode, commands };
+  window.vscode = { openFile, createNew, deletePath, findNode, commands, toggleBreakpoint, cwd:()=>cwd };
 
 })();
