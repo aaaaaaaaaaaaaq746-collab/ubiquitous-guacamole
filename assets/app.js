@@ -138,6 +138,9 @@ Built with ❤️ — not affiliated with Microsoft.
   }
 }` },
       { name: 'hi.txt', type: 'file', path: 'hi.txt', content: 'hi' },
+      { name: 'main.cpp', type: 'file', path: 'main.cpp', content: `#include <iostream>\nusing namespace std;\n\nint main() {\n    cout << "Hello from C++!" << endl;\n    int x = 42;\n    cout << "Value of x is " << x << endl;\n    return 0;\n}\n` },
+      { name: 'hello.c', type: 'file', path: 'hello.c', content: `#include <stdio.h>\n\nint main() {\n    printf("Hello from C!\\n");\n    int n = 7;\n    printf("Number: %d\\n", n);\n    return 0;\n}\n` },
+      { name: 'example.py', type: 'file', path: 'example.py', content: `print("Hello from Python!")\nprint("Python works in browser terminal")\n` },
     ]
   };
 
@@ -495,6 +498,19 @@ Built with ❤️ — not affiliated with Microsoft.
       { label: 'Copy Path', kbd:'Ctrl+Alt+C', action: () => copyPath(path) },
       { label: 'Copy Relative Path', action: () => { navigator.clipboard.writeText(path); toast('Copied relative: '+path); } },
       { label: 'Reveal in Explorer', action: () => { expanded.add(findParent(path).parentPath); renderTree(); document.querySelector(`.tree-item[data-path="${path}"]`)?.scrollIntoView({block:'center'}); toast('Revealed '+path); } },
+      ...(path.endsWith('.cpp')||path.endsWith('.c')||path.endsWith('.cc') ? [
+        { type:'sep' },
+        { label: 'Run C/C++ File ▶', kbd:'g++ + ./a.out', action: () => {
+          const out = path.split('/').pop().replace(/\.(cpp|c|cc)$/,'');
+          doCompile([path, '-o', out], path.endsWith('.c')?'gcc':'g++');
+          setTimeout(()=>doRunBinary('./'+out), 200);
+        }},
+        { label: 'Compile Only (g++)', action: () => doCompile([path, '-o', path.split('/').pop().replace(/\.(cpp|c|cc)$/,'')], path.endsWith('.c')?'gcc':'g++') },
+      ] : []),
+      ...(path.endsWith('.py') ? [
+        { type:'sep' },
+        { label: 'Run Python File ▶', action: () => commands.python([path]) },
+      ] : []),
     ]);
   });
   // Keyboard for explorer operations
@@ -695,6 +711,15 @@ Built with ❤️ — not affiliated with Microsoft.
     // update title
     titlebarFilename.textContent = `${path.split('/').pop()} — ${path} — Visual Studio Code`;
     statusLanguage.textContent = getLanguage(path) === 'plaintext' ? 'Plain Text' : getLanguage(path).charAt(0).toUpperCase() + getLanguage(path).slice(1);
+    // hint for C/C++ run
+    if(path.endsWith('.cpp')||path.endsWith('.c')||path.endsWith('.cc')){
+      // subtle status hint via toast once per file open session
+      if(!window._hintedRun) window._hintedRun=new Set();
+      if(!window._hintedRun.has(path)){
+        window._hintedRun.add(path);
+        setTimeout(()=>toast(`▶ Run: right-click → "Run C/C++ File"  or terminal: ${path.endsWith('.c')?'gcc':'g++'} ${path} -o ${path.split('/').pop().replace(/\.(cpp|c|cc)$/,'')} && ./${path.split('/').pop().replace(/\.(cpp|c|cc)$/,'')}`), 600);
+      }
+    }
   }
   function closeTab(path) {
     const tab = openTabs.find(t => t.path === path);
@@ -1679,6 +1704,164 @@ Built with ❤️ — not affiliated with Microsoft.
   terminalLog('Type "help" for available commands. This terminal is fully functional — try ls, cat, npm, node, clear.');
   terminalLog('');
 
+  // --- C/C++/Python runner: compile & execute in-browser ---
+  const compiledBinaries = {};
+  function resolveVar(name, content){
+    try{
+      const re=new RegExp('\\b'+name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\s*=\\s*([^;\\n]+)\\s*;');
+      const m=content.match(re);
+      if(m){
+        let v=m[1].trim().replace(/\/\/.*/, '').trim();
+        if((v.startsWith('"')&&v.endsWith('"'))||(v.startsWith("'")&&v.endsWith("'"))) v=v.slice(1,-1);
+        return v;
+      }
+    }catch{}
+    return name;
+  }
+  function simulateCppOutput(content){
+    const out=[];
+    const coutRe=/(?:std::)?cout\s*<<(.*?);/gs;
+    let m;
+    while((m=coutRe.exec(content))!==null){
+      let expr=m[1];
+      let parts=expr.split('<<');
+      let line='';
+      for(let raw of parts){
+        let p=raw.trim();
+        if(!p) continue;
+        if(p==='endl' || p==='std::endl' || p.includes('endl')){
+          if(line) { out.push(line); line=''; } continue;
+        }
+        let strMatch=p.match(/^"(.*)"$/s);
+        if(strMatch){
+          let s=strMatch[1].replace(/\\n/g,'\n').replace(/\\t/g,'\t');
+          if(s.includes('\n')){
+            let segs=s.split('\n');
+            line+=segs[0];
+            if(line) out.push(line);
+            for(let i=1;i<segs.length;i++){ if(segs[i] || i<segs.length-1) out.push(segs[i]); }
+            line='';
+          } else { line+=s; }
+          continue;
+        }
+        let sqMatch=p.match(/^'(.*)'$/s);
+        if(sqMatch){ line+=sqMatch[1]; continue; }
+        if(!isNaN(p)){ line+=p; continue; }
+        let clean=p.replace(/^std::/,'').replace(/\(int\)|\(float\)/g,'').trim();
+        let val=resolveVar(clean, content);
+        line+=val;
+      }
+      if(line) out.push(line);
+    }
+    const printfRe=/printf\s*\(\s*"([^"]*)"\s*(?:,\s*([^)]*))?\)/g;
+    while((m=printfRe.exec(content))!==null){
+      let fmt=m[1].replace(/\\n/g,'\n').replace(/%[dfscluoxX%]/g,'').trim();
+      let args=m[2];
+      if(args){
+        let argParts=args.split(',').map(a=>a.trim()).filter(Boolean);
+        for(let a of argParts){
+          let v=resolveVar(a, content);
+          if(v!==a) fmt+=' '+v;
+          else if(!isNaN(a)) fmt+=' '+a;
+          else if(a.startsWith('"')&&a.endsWith('"')) fmt+=' '+a.slice(1,-1);
+          else fmt+=' '+a;
+        }
+      }
+      if(fmt) fmt.split('\n').forEach(l=>{ out.push(l); });
+    }
+    if(out.length===0){
+      if(content.includes('Hello')) out.push('Hello, World!');
+      else if(!content.trim()) out.push('(empty file — no output)');
+      else out.push('(program executed — no cout/printf output captured)');
+    }
+    return out;
+  }
+  function simulateCOutput(content){
+    const out=[];
+    const printfRe=/printf\s*\(\s*"([^"]*)"\s*(?:,\s*([^)]*))?\)/g;
+    let m;
+    while((m=printfRe.exec(content))!==null){
+      let fmt=m[1].replace(/\\n/g,'\n');
+      let args=m[2] ? m[2].split(',').map(a=>a.trim()) : [];
+      let argIdx=0;
+      fmt=fmt.replace(/%[dfscluoxX%]/g, ()=> {
+        let a=args[argIdx++] || '';
+        let v=resolveVar(a, content);
+        if(v!==a) return v;
+        if(!isNaN(a)) return a;
+        if(a.startsWith('"')&&a.endsWith('"')) return a.slice(1,-1);
+        return a || '';
+      });
+      fmt.split('\n').forEach(l=>{ out.push(l); });
+    }
+    if(out.length===0){
+      if(content.includes('Hello')) out.push('Hello, World!');
+      else out.push('(program executed — no printf output)');
+    }
+    return out;
+  }
+  function simulatePythonOutput(content){
+    const out=[];
+    const re=/print\s*\(\s*["']([^"']*)["']\s*\)/g;
+    let m;
+    while((m=re.exec(content))!==null) out.push(m[1]);
+    if(out.length===0) out.push('(python executed — no print output)');
+    return out;
+  }
+  function doCompile(args, compiler){
+    let src=null, out='a.out';
+    for(let i=0;i<args.length;i++){
+      let a=args[i];
+      if(a==='-o' && args[i+1]){ out=args[i+1]; i++; continue; }
+      if(a.endsWith('.cpp')||a.endsWith('.c')||a.endsWith('.cc')||a.endsWith('.cxx')||a.endsWith('.C')){
+        src=a;
+      }
+    }
+    if(!src){ terminalLog(`${compiler}: fatal error: no input files — try: ${compiler} main.cpp -o main`); return; }
+    let srcPath=resolvePath(src);
+    let node=findNode(srcPath);
+    if(!node){ terminalLog(`${compiler}: ${src}: No such file or directory`); return; }
+    terminalLog(`[${compiler}] compiling ${src} → ${out} ...`);
+    if(!node.content.includes('main')) terminalLog(`warning: no 'main' in ${src} — compiled anyway`);
+    compiledBinaries[out]=srcPath;
+    compiledBinaries['./'+out]=srcPath;
+    let base=out.split('/').pop();
+    compiledBinaries[base]=srcPath;
+    if(out==='a.out') compiledBinaries['a.out']=srcPath;
+    terminalLog(`✔ built ${out} from ${srcPath} — run with ./${out}`);
+  }
+  function doRunBinary(raw){
+    let parts=raw.trim().split(/\s+/);
+    let bin=parts[0];
+    let binName=bin.slice(2);
+    let srcPath=compiledBinaries[binName] || compiledBinaries[bin] || compiledBinaries[binName.split('/').pop()];
+    if(!srcPath){
+      let tryPath=resolvePath(binName);
+      let node=findNode(tryPath);
+      if(node && (tryPath.endsWith('.cpp')||tryPath.endsWith('.c')||tryPath.endsWith('.cc')||tryPath.endsWith('.py')||tryPath.endsWith('.js'))){
+        srcPath=tryPath;
+        terminalLog(`(running ${binName} directly — for C/C++ prefer: g++ ${binName} -o ${binName.split('.')[0]} && ./${binName.split('.')[0]})`);
+      } else {
+        terminalLog(`bash: ${bin}: No such file — compile first: g++ main.cpp -o main  (or gcc main.c -o main)`);
+        let avail=Object.keys(compiledBinaries).filter(k=>!k.startsWith('./')).join(', ');
+        if(avail) terminalLog(`available binaries: ${avail}`);
+        return;
+      }
+    }
+    let node=findNode(srcPath);
+    if(!node){ terminalLog(`error: source ${srcPath} missing`); return; }
+    let outputs=[];
+    if(srcPath.endsWith('.cpp')||srcPath.endsWith('.cc')||srcPath.endsWith('.cxx')) outputs=simulateCppOutput(node.content);
+    else if(srcPath.endsWith('.c')) outputs=simulateCOutput(node.content);
+    else if(srcPath.endsWith('.py')) outputs=simulatePythonOutput(node.content);
+    else if(srcPath.endsWith('.js')) {
+      let logs=[...node.content.matchAll(/console\.log\(([^)]+)\)/g)].map(m=>m[1]);
+      outputs=logs.length? logs : ['(no console.log)'];
+    } else outputs=[node.content.slice(0,500)];
+    terminalLog(`▶ ${bin} (${srcPath})`);
+    outputs.forEach(l=>terminalLog(l));
+  }
+
   const commands = {
     help: () => terminalLog(`Available commands:
   help            Show this help
@@ -1692,6 +1875,10 @@ Built with ❤️ — not affiliated with Microsoft.
   clear           Clear terminal
   npm <args>      Simulate npm (install / run dev)
   node <file>     Run JS file — shows console.log lines
+  g++ <file> [-o out]  Compile C++ → run with ./out
+  gcc <file> [-o out]  Compile C → run with ./out
+  ./<binary>      Run compiled C/C++ binary (e.g. ./a.out)
+  python[3] <file> Run Python file (print simulation)
   git status/log  Simulated git (see SCM panel)
   code/open <file> Open file (supports cwd relative)
   mkdir <name>    Create folder
@@ -1858,6 +2045,25 @@ Built with ❤️ — not affiliated with Microsoft.
       terminalLog(node.content);
     },
     pwd: () => { terminalLog('/home/user/ubiquitous-guacamole' + (cwd? '/'+cwd : '')); },
+    "g++": (args)=>doCompile(args,'g++'),
+    gcc: (args)=>doCompile(args,'gcc'),
+    "clang++": (args)=>doCompile(args,'clang++'),
+    clang: (args)=>doCompile(args,'clang'),
+    cc: (args)=>doCompile(args,'cc'),
+    "c++": (args)=>doCompile(args,'c++'),
+    python: (args)=>{
+      if(!args[0]){ terminalLog('Python 3.11.0 — type "python <file>" to run'); return; }
+      let p=resolvePath(args[0]); let n=findNode(p);
+      if(!n){ terminalLog(`python: can't open file '${args[0]}'`); return; }
+      terminalLog(`▶ python ${args[0]}`); simulatePythonOutput(n.content).forEach(l=>terminalLog(l));
+    },
+    python3: (args)=>{
+      if(!args[0]){ terminalLog('Python 3.11.0'); return; }
+      let p=resolvePath(args[0]); let n=findNode(p);
+      if(!n){ terminalLog(`python3: can't open file '${args[0]}'`); return; }
+      terminalLog(`▶ python3 ${args[0]}`); simulatePythonOutput(n.content).forEach(l=>terminalLog(l));
+    },
+    "./a.out": (args)=>doRunBinary("./a.out "+args.join(' ')),
   };
 
   terminalInput.addEventListener('keydown', (e) => {
@@ -1865,10 +2071,22 @@ Built with ❤️ — not affiliated with Microsoft.
       const raw = terminalInput.value.trim();
       if (!raw) return;
       terminalLog(`➜ ${raw}`, 'input');
-      const [cmd, ...args] = raw.split(/\s+/);
-      const fn = commands[cmd];
-      if (fn) fn(args);
-      else if (raw) terminalLog(`bash: command not found: ${cmd} — type 'help'`);
+      // support chaining with && and ./ binary execution
+      const chains = raw.split('&&').map(s=>s.trim()).filter(Boolean);
+      for(let chain of chains){
+        if(chain.startsWith('./') || chain.startsWith('./')){
+          doRunBinary(chain);
+          continue;
+        }
+        // handle make/make run alias
+        if(chain.startsWith('make ')) { terminalLog(`[make] ${chain}`); let t=chain.slice(5).trim(); if(t.startsWith('./')) doRunBinary(t); else terminalLog('make: Nothing to be done for `'+t+'` — try g++'); continue; }
+        const [cmd, ...args] = chain.split(/\s+/);
+        // ./xxx with no space after?
+        if(cmd.startsWith('./')){ doRunBinary(chain); continue; }
+        const fn = commands[cmd];
+        if (fn) fn(args);
+        else if (chain) terminalLog(`bash: command not found: ${cmd} — type 'help'`);
+      }
       terminalInput.value = '';
       // history
       terminalHistory.push(raw);
