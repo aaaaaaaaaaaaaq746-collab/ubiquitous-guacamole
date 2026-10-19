@@ -393,21 +393,121 @@ Built with ❤️ — not affiliated with Microsoft.
     toast(`Moved ${name} → ${destFolderPath||'root'}`);
   }
 
+  // --- Explorer File Operations — Subpart 1.4 (clipboard, duplicate, download) ---
+  let clipboard = null; // {op:'copy'|'cut', path, nodeDeepCopy}
+  function deepCopyNode(node) { return JSON.parse(JSON.stringify(node)); }
+  function duplicatePath(path) {
+    const node = findNode(path);
+    if (!node) return;
+    const {parent, parentPath, name} = findParent(path);
+    if (!parent) return;
+    let baseName = name;
+    const extIdx = baseName.lastIndexOf('.');
+    let copyName = extIdx===-1 ? baseName+' copy' : baseName.slice(0,extIdx)+' copy'+baseName.slice(extIdx);
+    let counter=1;
+    while (parent.children.find(c=>c.name===copyName)) { copyName = (extIdx===-1? baseName+` copy ${counter}`: baseName.slice(0,extIdx)+` copy ${counter}`+baseName.slice(extIdx)); counter++; }
+    const copy = deepCopyNode(node);
+    copy.name = copyName;
+    const newPath = parentPath ? parentPath+'/'+copyName : copyName;
+    function upd(n, base){ n.path = base ? base+'/'+n.name : n.name; if(n.children) for(const ch of n.children) upd(ch, n.path); }
+    copy.path = newPath;
+    if(copy.children) for(const ch of copy.children) upd(ch, copy.path);
+    parent.children.push(copy);
+    saveFS(); renderTree(); toast(`Duplicated ${name} → ${copyName}`);
+    if (copy.type==='file') openFile(copy.path);
+  }
+  function downloadPath(path) {
+    const node = findNode(path);
+    if (!node || node.type!=='file') { toast('Select a file to download'); return; }
+    const blob = new Blob([node.content], {type:'text/plain'});
+    const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=node.name; a.click(); toast(`Downloaded ${node.name}`);
+  }
+  function copyPath(path) { const v = path; navigator.clipboard.writeText(v).then(()=>toast('Copied path: '+v)).catch(()=>toast('Copied: '+v)); }
+  function doCopy(path){ const n=findNode(path); if(!n) return; clipboard={op:'copy', path, node: deepCopyNode(n)}; toast(`Copied ${n.name} — Ctrl+V to paste`); }
+  function doCut(path){ const n=findNode(path); if(!n) return; clipboard={op:'cut', path, node: deepCopyNode(n)}; toast(`Cut ${n.name} — Ctrl+V to paste`); }
+  function doPaste(targetPath) {
+    if (!clipboard) { toast('Clipboard empty — Copy or Cut first'); return; }
+    let dest = targetPath ? findNode(targetPath) : fsRoot;
+    if (dest && dest.type==='file') dest = findNode(findParent(dest.path).parentPath) || fsRoot;
+    if (!dest || !dest.children) dest = fsRoot;
+    // prevent paste into itself
+    if (clipboard.path===dest.path || dest.path.startsWith(clipboard.path+'/')) { toast('Cannot paste into itself'); return; }
+    const srcName = clipboard.node.name;
+    let name = srcName;
+    if (dest.children.find(c=>c.name===name)) {
+      // auto-rename
+      let c=1; const idx=name.lastIndexOf('.');
+      while(dest.children.find(x=>x.name===name)) { name = idx===-1? `${srcName} (${c})` : `${srcName.slice(0,idx)} (${c})${srcName.slice(idx)}`; c++; }
+    }
+    const copy = deepCopyNode(clipboard.node);
+    copy.name = name;
+    const newPath = dest.path ? dest.path + '/' + name : name;
+    function upd(n, base){ n.path = base ? base+'/'+n.name : n.name; if(n.children) for(const ch of n.children) upd(ch, n.path); }
+    copy.path = newPath;
+    if(copy.children) for(const ch of copy.children) upd(ch, copy.path);
+    dest.children.push(copy);
+    expanded.add(dest.path);
+    if (clipboard.op==='cut') {
+      // remove original
+      const {parent: oldParent} = findParent(clipboard.path);
+      if (oldParent) oldParent.children = oldParent.children.filter(c=>c.path!==clipboard.path);
+      clipboard=null;
+      // fix tabs
+      const oldPath=clipboard?.path;
+      // tabs already handled via new copy
+      toast(`Moved → ${dest.path||'root'}`);
+    } else {
+      toast(`Pasted ${name} → ${dest.path||'root'}`);
+    }
+    saveFS(); renderTree();
+  }
+
   fileTreeEl.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     const item = e.target.closest('.tree-item');
-    if (!item) return showContextMenu(e.clientX, e.clientY, [{ label: 'New File...', action: () => createNew('file', item.dataset.path) }, {label:'New Folder...', action: () => createNew('folder', item.dataset.path)}]);
+    // click on empty area
+    if (!item) {
+      return showContextMenu(e.clientX, e.clientY, [
+        { label: 'New File...', kbd:'', action: () => createNew('file', '') },
+        { label: 'New Folder...', action: () => createNew('folder', '') },
+        { type: 'sep' },
+        { label: 'Paste', kbd:'Ctrl+V', action: () => doPaste('') },
+        { label: 'Refresh', action: () => { renderTree(); toast('Explorer refreshed'); } },
+      ]);
+    }
     const path = item.dataset.path;
+    const node = findNode(path);
+    const isFolder = node?.type==='folder';
     showContextMenu(e.clientX, e.clientY, [
       { label: 'New File...', kbd: '', action: () => createNew('file', path) },
       { label: 'New Folder...', action: () => createNew('folder', path) },
       { type: 'sep' },
-      { label: 'Rename...', action: () => renamePath(path) },
-      { label: 'Delete', action: () => deletePath(path) },
+      { label: 'Cut', kbd:'Ctrl+X', action: () => doCut(path) },
+      { label: 'Copy', kbd:'Ctrl+C', action: () => doCopy(path) },
+      { label: 'Paste', kbd:'Ctrl+V', action: () => doPaste(path) },
       { type: 'sep' },
-      { label: 'Copy Path', action: () => { navigator.clipboard.writeText(path); toast('Copied path: ' + path); } },
-      { label: 'Copy Relative Path', action: () => { navigator.clipboard.writeText(path); toast('Copied'); } },
+      { label: 'Duplicate', action: () => duplicatePath(path) },
+      { label: 'Download...', action: () => downloadPath(path) },
+      { type: 'sep' },
+      { label: 'Rename...', kbd:'Enter', action: () => renamePath(path) },
+      { label: 'Delete', kbd:'Delete', action: () => deletePath(path) },
+      { type: 'sep' },
+      { label: 'Copy Path', kbd:'Ctrl+Alt+C', action: () => copyPath(path) },
+      { label: 'Copy Relative Path', action: () => { navigator.clipboard.writeText(path); toast('Copied relative: '+path); } },
+      { label: 'Reveal in Explorer', action: () => { expanded.add(findParent(path).parentPath); renderTree(); document.querySelector(`.tree-item[data-path="${path}"]`)?.scrollIntoView({block:'center'}); toast('Revealed '+path); } },
     ]);
+  });
+  // Keyboard for explorer operations
+  fileTreeEl.addEventListener('keydown', (e)=>{
+    const active = document.activeElement?.closest('.tree-item');
+    if (!active) return;
+    const path = active.dataset.path;
+    if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='c') { e.preventDefault(); doCopy(path); }
+    else if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='x') { e.preventDefault(); doCut(path); }
+    else if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='v') { e.preventDefault(); doPaste(path); }
+    else if (e.key==='Delete' || (e.key==='Backspace' && e.metaKey)) { e.preventDefault(); deletePath(path); }
+    else if (e.key==='F2' || e.key==='Enter' && e.altKey) { e.preventDefault(); renamePath(path); }
+    else if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='d') { e.preventDefault(); duplicatePath(path); }
   });
 
   function createNew(type, basePath) {
