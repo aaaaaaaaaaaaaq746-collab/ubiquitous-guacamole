@@ -1724,8 +1724,50 @@ Built with ❤️ — not affiliated with Microsoft.
     }catch{}
     return name;
   }
+  // store cin inputs per run so multiple cout<<n use same value
+  function getCinValue(varName, content){
+    window.__cinInputs = window.__cinInputs || {};
+    if (window.__cinInputs[varName] !== undefined) return window.__cinInputs[varName];
+    // try to find if variable has literal assignment first
+    let hint = resolveVar(varName, content);
+    if (hint !== varName) { window.__cinInputs[varName]=hint; return hint; }
+    // prompt user for this stdin variable
+    let def = varName==='n' ? '5' : varName==='a' ? '10' : varName==='b' ? '20' : '5';
+    let v = prompt(`ankit.cpp wants input → enter value for '${varName}'  (cin >> ${varName}):`, def);
+    if (v===null) v=def;
+    window.__cinInputs[varName]=v;
+    terminalLog(`⌨ stdin → ${varName} = ${v}`);
+    return v;
+  }
+  function collectCinVars(content){
+    const s=new Set();
+    const re=/(?:std::)?cin\s*>>\s*([^;]+);/g;
+    let m;
+    while((m=re.exec(content))!==null){
+      let expr=m[1];
+      // split by >> and extract identifiers
+      for(let part of expr.split('>>')){
+        let v=part.trim().replace(/^&/,'').trim();
+        // identifier is first word
+        let id=(v.match(/[a-zA-Z_]\w*/) || [])[0];
+        if(id) s.add(id);
+      }
+    }
+    // also scanf for C-style mixed in cpp
+    const re2=/scanf\s*\([^,]*,\s*([^)]+)\)/g;
+    while((m=re2.exec(content))!==null){
+      for(let p of m[1].split(',')){
+        let id=p.trim().replace(/^&/,'').trim();
+        let clean=(id.match(/[a-zA-Z_]\w*/) || [])[0];
+        if(clean) s.add(clean);
+      }
+    }
+    return s;
+  }
   function simulateCppOutput(content){
     const out=[];
+    const cinVars=collectCinVars(content);
+    // reset per-run inputs to allow new prompts
     const coutRe=/(?:std::)?cout\s*<<(.*?);/gs;
     let m;
     while((m=coutRe.exec(content))!==null){
@@ -1754,7 +1796,11 @@ Built with ❤️ — not affiliated with Microsoft.
         if(sqMatch){ line+=sqMatch[1]; continue; }
         if(!isNaN(p)){ line+=p; continue; }
         let clean=p.replace(/^std::/,'').replace(/\(int\)|\(float\)/g,'').trim();
-        let val=resolveVar(clean, content);
+        // strip anything after space/paren like (char)
+        clean=clean.split(/[\s\(\)]/)[0].trim();
+        let val;
+        if(cinVars.has(clean)) val=getCinValue(clean, content);
+        else val=resolveVar(clean, content);
         line+=val;
       }
       if(line) out.push(line);
@@ -1784,6 +1830,8 @@ Built with ❤️ — not affiliated with Microsoft.
   }
   function simulateCOutput(content){
     const out=[];
+    const scanfVars=collectCinVars(content);
+    window.__cinInputs=window.__cinInputs||{};
     const printfRe=/printf\s*\(\s*"([^"]*)"\s*(?:,\s*([^)]*))?\)/g;
     let m;
     while((m=printfRe.exec(content))!==null){
@@ -1792,6 +1840,8 @@ Built with ❤️ — not affiliated with Microsoft.
       let argIdx=0;
       fmt=fmt.replace(/%[dfscluoxX%]/g, ()=> {
         let a=args[argIdx++] || '';
+        let clean=a.replace(/^&/,'').trim().split(/[\s\(\)]/)[0];
+        if(scanfVars.has(clean)) return getCinValue(clean, content);
         let v=resolveVar(a, content);
         if(v!==a) return v;
         if(!isNaN(a)) return a;
@@ -1863,7 +1913,8 @@ Built with ❤️ — not affiliated with Microsoft.
     compiledBinaries[base]=srcPath;
     if(out==='a.out') compiledBinaries['a.out']=srcPath;
     terminalLog(`✔ built ${out} from ${srcPath}`);
-    // auto-run so single command shows output (user expectation)
+    // auto-run so single command shows output (user expectation) — reset cin cache per run
+    window.__cinInputs={};
     terminalLog(`▶ running ${out} ...`);
     try{
       let outputs=[];
