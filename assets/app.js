@@ -741,10 +741,26 @@ Built with ❤️ — not affiliated with Microsoft.
       // keep preview optionally
     }
   }
+  // --- Breadcrumbs — Subpart 1.6 ---
   function updateBreadcrumbs() {
-    if (!activePath) { breadcrumbFile.textContent = 'Welcome'; return; }
-    breadcrumbFile.textContent = activePath;
+    const bc = document.getElementById('breadcrumbs');
+    if (!bc) return;
+    if (!activePath) { bc.innerHTML = `<span class="crumb">ubiquitous-guacamole</span><span class="sep">›</span><span class="crumb is-active" id="breadcrumbFile">Welcome</span><span class="breadcrumb-actions"><button class="icon-btn small" title="Go to Symbol (Ctrl+Shift+O)" data-cmd="goToSymbol">⌖</button></span>`; return; }
+    const parts = activePath.split('/');
+    const file = parts.pop();
+    const folder = parts.join(' › ') || 'ubiquitous-guacamole';
+    bc.innerHTML = `<span class="crumb" data-nav="" title="Go to folder">${folder}</span><span class="sep">›</span><span class="crumb is-active" id="breadcrumbFile" title="${activePath}">${file}</span><span class="breadcrumb-actions"><button class="icon-btn small" title="Go to Symbol (Ctrl+Shift+O)" data-cmd="goToSymbol">⌖</button></span>`;
+    bc.querySelector('[data-nav]')?.addEventListener('click', ()=>{
+      const folderPath = parts.join('/');
+      if (folderPath) expanded.add(folderPath);
+      renderTree(); toast('Revealed folder: '+(folderPath||'root'));
+    });
+    bc.querySelector('[data-cmd="goToSymbol"]')?.addEventListener('click', ()=>openPalette('@'));
+    // re-bind breadcrumbFile ref
+    const bf = document.getElementById('breadcrumbFile');
+    if (bf) { /* keep global var in sync */ }
   }
+  // initial breadcrumb setup already
 
   // --- Monaco ---
   let monacoEditor = null;
@@ -794,26 +810,39 @@ Built with ❤️ — not affiliated with Microsoft.
       monacoContainer.classList.add('hidden');
     }
   }
+  // Apply editor settings from LS (Part 1.6)
+  function getEditorSettings(){
+    return {
+      fontSize: parseInt(localStorage.getItem('vscode-fontSize')||'13'),
+      tabSize: parseInt(localStorage.getItem('vscode-tabSize')||'2'),
+      wordWrap: localStorage.getItem('vscode-wordwrap')||'on',
+      minimap: localStorage.getItem('vscode-minimap')!=='off',
+      theme: localStorage.getItem('vscode-theme')||'dark'
+    };
+  }
   function createMonacoEditor() {
     if (monacoEditor || !isMonacoReady) return;
+    const s = getEditorSettings();
     monacoEditor = monaco.editor.create(monacoContainer, {
       value: '// Select a file to start editing',
       language: 'javascript',
-      theme: 'vs-dark',
+      theme: s.theme==='light' ? 'vs' : 'vs-dark',
       automaticLayout: true,
-      minimap: { enabled: true },
-      fontSize: 13,
+      minimap: { enabled: s.minimap },
+      fontSize: s.fontSize,
       fontFamily: 'Cascadia Code, Fira Code, Consolas, monospace',
       lineHeight: 20,
       padding: { top: 12, bottom: 12 },
       scrollBeyondLastLine: false,
-      wordWrap: 'on',
-      tabSize: 2,
+      wordWrap: s.wordWrap,
+      tabSize: s.tabSize,
       cursorBlinking: 'smooth',
       smoothScrolling: true,
       bracketPairColorization: { enabled: true },
       guides: { bracketPairs: true, indentation: true },
-      suggest: { showKeywords: true }
+      suggest: { showKeywords: true },
+      glyphMargin: true, // for breakpoints
+      lineNumbersMinChars: 4
     });
     monacoEditor.onDidChangeModelContent(() => {
       if (!activePath) return;
@@ -859,24 +888,48 @@ Built with ❤️ — not affiliated with Microsoft.
       updateStatusPosition();
       monacoContainer.classList.remove('hidden');
       fallbackEditor.classList.add('hidden');
+      // editor context menu — enhance (cut/copy/paste, format, command palette)
+      monacoEditor.onContextMenu(()=>{ /* native menu + our */ });
+      // right-click on editor to show our menu after delay
+      monacoContainer.oncontextmenu = (e)=>{
+        e.preventDefault();
+        const sel = monacoEditor.getSelection();
+        const hasSel = sel && !sel.isEmpty();
+        showContextMenu(e.clientX, e.clientY, [
+          {label: hasSel?'Cut':'Cut', kbd:'Ctrl+X', action:()=>document.execCommand('cut')},
+          {label: 'Copy', kbd:'Ctrl+C', action:()=>document.execCommand('copy')},
+          {label: 'Paste', kbd:'Ctrl+V', action:()=>document.execCommand('paste')},
+          {type:'sep'},
+          {label:'Format Document', kbd:'Shift+Alt+F', action:()=>{ monacoEditor.getAction('editor.action.formatDocument').run(); toast('Formatted'); }},
+          {label:'Command Palette...', kbd:'Ctrl+Shift+P', action:()=>openPalette('>')},
+          {type:'sep'},
+          {label:'Copy Path', action:()=>copyPath(node.path)},
+          {label:'Reveal in Explorer', action:()=>{ expanded.add(findParent(node.path).parentPath); renderTree(); }},
+        ]);
+      };
+      // outline auto-refresh
+      setTimeout(()=>{ if(!document.getElementById('outlineTree').classList.contains('hidden')) renderOutline(); }, 100);
+      // fallback format button
+      document.getElementById('fallbackFormat')?.addEventListener('click', ()=>{ fallbackTextarea.value = node.content.replace(/;/g,';\n').trim(); fallbackTextarea.dispatchEvent(new Event('input')); toast('Formatted'); });
     } else if (isMonacoReady && !monacoEditor) {
-      // monaco ready but editor not yet created? create with value
       pendingContent = { path: node.path, content: node.content };
       if (!monacoEditor) createMonacoEditor();
     } else {
-      // fallback
       fallbackTextarea.value = node.content;
       fallbackEditor.classList.remove('hidden');
       monacoContainer.classList.add('hidden');
-      // handle input
       fallbackTextarea.oninput = () => {
         node.content = fallbackTextarea.value;
         const tab = openTabs.find(t => t.path === activePath);
         if (tab) tab.dirty = true;
-        renderTabs(); debouncedSave();
+        renderTabs(); debouncedSave(); updateStatusPosition();
       };
     }
-    breadcrumbFile.textContent = node.path;
+    updateBreadcrumbs();
+    // update status language & indent
+    const lang = getLanguage(node.path);
+    document.getElementById('statusLanguage').textContent = lang==='plaintext'?'Plain Text': lang.charAt(0).toUpperCase()+lang.slice(1);
+    document.getElementById('statusIndent').textContent = `Spaces: ${getEditorSettings().tabSize}`;
   }
   function updateStatusPosition() {
     if (!monacoEditor || !activePath) { statusPosition.textContent = 'Ln 1, Col 1'; return; }
