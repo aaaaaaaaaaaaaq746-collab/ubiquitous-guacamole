@@ -597,6 +597,24 @@ Built with ❤️ — not affiliated with Microsoft.
         ${tab.dirty ? `<span class="tab-dirty" title="Unsaved changes"></span>` : ''}
         <button class="tab-close" aria-label="Close ${label}">×</button>
       `;
+      el.draggable = true;
+      el.addEventListener('dragstart', (e)=>{ e.dataTransfer.setData('text/tab', tab.path); el.classList.add('is-dragging'); e.dataTransfer.effectAllowed='move'; });
+      el.addEventListener('dragend', ()=>el.classList.remove('is-dragging'));
+      el.addEventListener('dragover', (e)=>{ e.preventDefault(); el.classList.add('is-drop-target'); });
+      el.addEventListener('dragleave', ()=>el.classList.remove('is-drop-target'));
+      el.addEventListener('drop', (e)=>{
+        e.preventDefault(); el.classList.remove('is-drop-target');
+        const src = e.dataTransfer.getData('text/tab');
+        if (!src || src===tab.path) return;
+        const srcIdx = openTabs.findIndex(t=>t.path===src);
+        const destIdx = openTabs.findIndex(t=>t.path===tab.path);
+        if (srcIdx===-1||destIdx===-1) return;
+        const [moved] = openTabs.splice(srcIdx,1);
+        // if dragging to right, adjust index if src was before dest
+        const insertIdx = srcIdx < destIdx ? destIdx : destIdx;
+        openTabs.splice(insertIdx,0,moved);
+        renderTabs();
+      });
       el.addEventListener('click', (e) => {
         if (e.target.closest('.tab-close')) {
           closeTab(tab.path);
@@ -606,10 +624,58 @@ Built with ❤️ — not affiliated with Microsoft.
         openFile(tab.path);
       });
       // middle click close
-      el.addEventListener('auxclick', (e) => { if (e.button === 1) closeTab(tab.path); });
+      el.addEventListener('auxclick', (e) => { if (e.button === 1) { e.preventDefault(); closeTab(tab.path); } });
+      // double-click to pin? not implemented — duplicate
+      el.addEventListener('dblclick', ()=>{ /* keep */ });
+      // context menu for tab
+      el.addEventListener('contextmenu', (e)=>{
+        e.preventDefault();
+        const idx = openTabs.findIndex(t=>t.path===tab.path);
+        showContextMenu(e.clientX, e.clientY, [
+          {label:'Close', kbd:'Ctrl+F4', action:()=>closeTab(tab.path)},
+          {label:'Close Others', action:()=>{ const keep=tab.path; openTabs.filter(t=>t.path!==keep && !t.dirty).forEach(t=>closeTab(t.path)); const dirtyOthers=openTabs.filter(t=>t.path!==keep && t.dirty); if(dirtyOthers.length) toast(`Skipped ${dirtyOthers.length} dirty tabs`); }},
+          {label:'Close to the Right', action:()=>{ const toClose=openTabs.slice(idx+1).map(t=>t.path); toClose.forEach(p=>closeTab(p)); }},
+          {label:'Close All', action:()=>{ openTabs.slice().forEach(t=>closeTab(t.path)); }},
+          {type:'sep'},
+          {label:'Copy Path', action:()=>copyPath(tab.path)},
+          {label:'Copy Relative Path', action:()=>{ navigator.clipboard.writeText(tab.path); toast('Copied relative'); }},
+          {label:'Reveal in Explorer', action:()=>{ expanded.add(findParent(tab.path).parentPath); renderTree(); toast('Revealed in Explorer'); }},
+          {type:'sep'},
+          {label:'Split Right', action:()=>toast('Split editor — use Split button (Ctrl+\\)')},
+          {label:'Pin Tab', action:()=>toast('Pin — tab will stay (demo)')},
+        ]);
+      });
       tabsBar.appendChild(el);
     }
+    // Tabs bar context (empty)
+    tabsBar.addEventListener('contextmenu', (e)=>{
+      if (e.target.closest('.tab')) return; // handled per tab
+      e.preventDefault();
+      showContextMenu(e.clientX, e.clientY, [
+        {label:'Close All', action:()=>{ openTabs.slice().forEach(t=>closeTab(t.path)); }},
+        {label:'Close Others', action:()=>toast('No active tab to keep')},
+        {type:'sep'},
+        {label:'New Untitled File', kbd:'Ctrl+N', action:()=>createNew('file','')},
+      ]);
+    });
+    // Keyboard for tabs: Ctrl+W, Ctrl+Tab, Ctrl+PageUp/Down
+    // handled globally below
   }
+  function setupTabsKeyboard(){
+    document.addEventListener('keydown', (e)=>{
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && e.key==='w' && !e.shiftKey) { if(activePath){ e.preventDefault(); closeTab(activePath); } }
+      else if (mod && e.key==='Tab' && !e.shiftKey) { e.preventDefault(); if(openTabs.length){ const idx=openTabs.findIndex(t=>t.path===activePath); const next=(idx+1)%openTabs.length; openFile(openTabs[next].path); } }
+      else if (mod && e.shiftKey && e.key==='Tab') { e.preventDefault(); if(openTabs.length){ const idx=openTabs.findIndex(t=>t.path===activePath); const prev=(idx-1+openTabs.length)%openTabs.length; openFile(openTabs[prev].path); } }
+      else if (mod && e.key==='PageDown') { e.preventDefault(); if(openTabs.length){ const idx=openTabs.findIndex(t=>t.path===activePath); const next=Math.min(idx+1, openTabs.length-1); openFile(openTabs[next].path); } }
+      else if (mod && e.key==='PageUp') { e.preventDefault(); if(openTabs.length){ const idx=openTabs.findIndex(t=>t.path===activePath); const prev=Math.max(idx-1,0); openFile(openTabs[prev].path); } }
+      else if (mod && /^[1-9]$/.test(e.key)) { const n=parseInt(e.key)-1; if(openTabs[n]) { e.preventDefault(); openFile(openTabs[n].path); } }
+    });
+    // quick patch updateBadges on tab changes
+    const origRT = renderTabs;
+    // wrapper already
+  }
+  setupTabsKeyboard();
   function openFile(path) {
     const node = findNode(path);
     if (!node || node.type !== 'file') return;
