@@ -153,6 +153,12 @@ Built with ❤️ — not affiliated with Microsoft.
       const parsed = JSON.parse(saved);
       // merge to keep structure but restore content changes
       fsRoot = parsed;
+      // migrate: inject sample C/C++ files if missing (for existing localStorage)
+      for(const sample of initialFS.children){
+        if(!fsRoot.children.find(c=>c.name===sample.name)){
+          fsRoot.children.push(structuredClone(sample));
+        }
+      }
     }
   } catch {}
 
