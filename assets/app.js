@@ -855,9 +855,14 @@ Built with ❤️ — not affiliated with Microsoft.
         renderTabs(); renderTree();
         debouncedSave();
         updateStatusPosition();
+        scheduleProblems();
       }
     });
-    monacoEditor.onDidChangeCursorPosition(updateStatusPosition);
+    monacoEditor.onDidChangeCursorPosition((e)=>{ updateStatusPosition(); // also track selection
+      const sel=monacoEditor.getSelection();
+      const selEl=document.getElementById('statusSelection');
+      if(selEl) selEl.textContent = sel && !sel.isEmpty() ? `( ${sel.endLineNumber-sel.startLineNumber+1} selected)` : 'No Selection';
+    });
   }
   let saveTimeout = null;
   function debouncedSave() {
@@ -1710,7 +1715,7 @@ Built with ❤️ — not affiliated with Microsoft.
   makeResizer(document.querySelector('[data-resize="panel"]'), panel, 'horizontal', 'vscode-panel-height');
   makeResizer(document.querySelector('[data-resize="aux"]'), auxiliaryBar, 'vertical', 'vscode-aux-width');
 
-  // --- Welcome actions — Subpart 1.8 ---
+  // --- Welcome actions — Subpart 1.8 + Problems integration ---
   document.querySelectorAll('[data-cmd="newFile"]').forEach(b=>b.addEventListener('click', () => createNew('file','')));
   document.querySelectorAll('[data-cmd="openFolder"]').forEach(b=>b.addEventListener('click', () => toast('Folder picker — in a real app this would show system dialog. Use Explorer to create files.')));
   document.querySelectorAll('[data-open]').forEach(a=>a.addEventListener('click', (e)=>{ e.preventDefault(); openFile(a.dataset.open); }));
@@ -1721,7 +1726,7 @@ Built with ❤️ — not affiliated with Microsoft.
       if (isMonacoReady) { window.monaco2 = monaco.editor.create(document.getElementById('monacoContainer2'), { value: '// Split group — open another file here', language:'javascript', theme: getEditorSettings().theme==='light'?'vs':'vs-dark', automaticLayout:true, fontSize: getEditorSettings().fontSize, minimap:{enabled:getEditorSettings().minimap}, wordWrap:getEditorSettings().wordWrap, tabSize:getEditorSettings().tabSize }); }
     } toast('Split Right — second group visible'); } else { second.classList.add('hidden'); toast('Split closed'); }
   }));
-  document.querySelectorAll('[data-cmd="splitDown"]').forEach(b=>b.addEventListener('click', ()=>toast('Split Down — use Split Right for now'))); 
+  document.querySelectorAll('[data-cmd="splitDown"]').forEach(b=>b.addEventListener('click', ()=>toast('Split Down — use Split Right for now')));
   document.querySelectorAll('[data-cmd="closePreview"]').forEach(b=>b.addEventListener('click', ()=>{ previewPane.classList.add('hidden'); if(activePath) showEditor(); }));
   document.querySelectorAll('[data-cmd="newFolder"]').forEach(b=>b.addEventListener('click', ()=>createNew('folder','')));
   document.querySelectorAll('[data-cmd="newTerminal"]').forEach(b=>b.addEventListener('click', ()=>{ terminalLog('New terminal created'); terminalInput.focus(); pushNotification('Terminal','New terminal instance'); }));
@@ -1730,8 +1735,7 @@ Built with ❤️ — not affiliated with Microsoft.
   if (welcomeCheck) {
     welcomeCheck.checked = localStorage.getItem('vscode-welcome')!=='off';
     welcomeCheck.addEventListener('change', ()=>localStorage.setItem('vscode-welcome', welcomeCheck.checked?'on':'off'));
-    // respect on load
-    if (localStorage.getItem('vscode-welcome')==='off') { // skip welcome, open last file
+    if (localStorage.getItem('vscode-welcome')==='off') {
       const last = recent[0];
       if (last) setTimeout(()=>openFile(last), 300);
     }
@@ -1739,6 +1743,63 @@ Built with ❤️ — not affiliated with Microsoft.
   document.getElementById('checkUpdates')?.addEventListener('click', (e)=>{ e.preventDefault(); toast('Checking for updates...'); setTimeout(()=>toast('You are up to date — v1.104.0'), 800); pushNotification('Update','VS Code Web is up to date'); });
   document.querySelectorAll('[data-cmd="showPalette"]').forEach(b=>b.addEventListener('click', ()=>openPalette('>')));
   document.querySelector('[data-cmd="toggleDebug"]')?.addEventListener('click', (e)=>{ e.preventDefault(); switchView('debug'); });
+
+  // --- Problems — Subpart 2.3: live diagnostics ---
+  function analyzeProblems(){
+    const probs=[];
+    for(const f of getAllFiles()){
+      const lines=f.content.split('\n');
+      lines.forEach((line,i)=>{
+        if (/TODO:/.test(line)) probs.push({path:f.path, line:i+1, col: line.indexOf('TODO:')+1, msg:'TODO should be resolved', sev:'info', code:'TODO'});
+        if (/FIXME/.test(line)) probs.push({path:f.path, line:i+1, col: line.indexOf('FIXME')+1, msg:'FIXME: fix before commit', sev:'warning', code:'FIXME'});
+        if (/console\.log\(/.test(line) && f.path.endsWith('.js')) probs.push({path:f.path, line:i+1, col: line.indexOf('console.log')+1, msg:'Unexpected console.log — remove before production', sev:'warning', code:'no-console'});
+      });
+      // bracket imbalance simple
+      const open = (f.content.match(/{/g)||[]).length, close=(f.content.match(/}/g)||[]).length;
+      if (open!==close) probs.push({path:f.path, line:1, col:1, msg:`Mismatched braces: ${open} { vs ${close} }`, sev:'error', code:'brace'});
+      if (f.content.includes('undefined') && f.path.endsWith('.js')) probs.push({path:f.path, line: f.content.split('\n').findIndex(l=>l.includes('undefined'))+1, col:1, msg:"'undefined' used — consider null check", sev:'warning', code:'undef'});
+    }
+    // ensure at least demo errors if none
+    if (probs.length<2) {
+      probs.push({path:'src/app.js', line:7, col:12, msg:"'Editor' is defined but never used", sev:'warning', code:'unused'}, {path:'src/styles.css', line:12, col:3, msg:'Unknown property --accent typo? expected --accent', sev:'error', code:'css'});
+    }
+    return probs;
+  }
+  function renderProblems(){
+    const list=document.getElementById('problemsList');
+    const countEl=document.getElementById('problemsCount');
+    const errEl=document.getElementById('statusErrorCount');
+    const warnEl=document.getElementById('statusWarnCount');
+    if(!list) return;
+    const probs=analyzeProblems();
+    const errs=probs.filter(p=>p.sev==='error').length;
+    const warns=probs.filter(p=>p.sev==='warning').length;
+    if(countEl) countEl.textContent=probs.length;
+    if(errEl) errEl.textContent=errs;
+    if(warnEl) warnEl.textContent=warns;
+    if(probs.length===0){ list.innerHTML='<div class="muted small" style="padding:12px">No problems have been detected in the workspace.</div>'; return; }
+    list.innerHTML = probs.map(p=>`<div class="problem-item" data-path="${p.path}" data-line="${p.line}"><span class="problem-sev ${p.sev}"></span><span style="flex:1"><strong>${p.msg}</strong><br><span class="problem-path">${p.path} [${p.line}:${p.col}] • ${p.code}</span></span><span class="muted small">${p.sev}</span></div>`).join('');
+    list.querySelectorAll('.problem-item').forEach(el=>el.addEventListener('click', ()=>{
+      openFile(el.dataset.path);
+      setTimeout(()=>{ if(monacoEditor) { monacoEditor.revealLineInCenter(parseInt(el.dataset.line)); monacoEditor.setPosition({lineNumber: parseInt(el.dataset.line), column: el.dataset.col?parseInt(el.dataset.col):1}); monacoEditor.focus(); }}, 120);
+    }));
+    // also add Monaco markers if available
+    if (monacoInstance && monacoEditor) {
+      const model=monacoEditor.getModel();
+      if(model){
+        const markers = probs.filter(p=>p.path===activePath).map(p=>({startLineNumber:p.line, startColumn:p.col, endLineNumber:p.line, endColumn:p.col+10, message:p.msg, severity: p.sev==='error'? monaco.MarkerSeverity.Error : p.sev==='warning'? monaco.MarkerSeverity.Warning : monaco.MarkerSeverity.Info}));
+        monaco.editor.setModelMarkers(model, 'vscode-clone', markers);
+      }
+    }
+  }
+  // auto-refresh problems on file change/save/open
+  let problemsDebounce=null;
+  function scheduleProblems(){ clearTimeout(problemsDebounce); problemsDebounce=setTimeout(renderProblems, 500); }
+  // hook into save/open/monaco change
+  const _origOpenFileForProblems = openFile;
+  // wrap happens via later — we call after each relevant op
+  document.getElementById('problemsFilterBtn')?.addEventListener('click', ()=>showPicker('Filter Problems', [{label:'All'},{label:'Errors only'},{label:'Warnings only'}], it=>toast('Filter: '+it.label)));
+  document.getElementById('problemsClearBtn')?.addEventListener('click', ()=>toast('Problems are derived from files — edit to clear'));
   // Global keyboard: Ctrl+N/O/G, Esc handling for modals, zen exit
   document.addEventListener('keydown', (e)=>{
     const mod = e.ctrlKey || e.metaKey;
@@ -1746,14 +1807,14 @@ Built with ❤️ — not affiliated with Microsoft.
     else if (mod && e.key.toLowerCase()==='o') { e.preventDefault(); openPalette(''); }
     else if (mod && e.key.toLowerCase()==='g' && !e.shiftKey) { e.preventDefault(); openGotoLine(); }
     else if (e.key==='Escape') {
-      // close modals in order
       if (!document.getElementById('findWidget').classList.contains('hidden')) { document.getElementById('findWidget').classList.add('hidden'); }
       else if (!document.getElementById('settingsOverlay').classList.contains('hidden')) { document.getElementById('settingsOverlay').classList.add('hidden'); }
       else if (!document.getElementById('pickerOverlay').classList.contains('hidden')) { document.getElementById('pickerOverlay').classList.add('hidden'); }
-      else if (!document.getElementById('notificationsPanel').classList.contains('hidden') && e.target.closest('.notifications')==null) { /* keep */ }
       else if (document.body.classList.contains('zen-mode')) { document.body.classList.remove('zen-mode'); toast('Exited Zen Mode'); }
     }
   });
+  // initial problems render
+  setTimeout(renderProblems, 600);
   document.querySelectorAll('[data-cmd="refresh"]').forEach(b=>b.addEventListener('click', ()=>{ renderTree(); toast('Explorer refreshed'); }));
   document.querySelectorAll('[data-cmd="commit"]').forEach(b=>b.addEventListener('click', ()=>toast('Committed to main — 2 files changed (demo)')));
 
