@@ -223,27 +223,60 @@ Built with ❤️ — not affiliated with Microsoft.
   const panel = document.getElementById('panel');
   const recentList = document.getElementById('recentList');
 
-  // --- File Tree Rendering ---
+  // --- File Tree Rendering — Subpart 1.3 (enhanced) ---
   function renderTree() {
     fileTreeEl.innerHTML = '';
+    // update file count
+    const allFiles = getAllFiles();
+    const countEl = document.getElementById('explorerFileCount');
+    if (countEl) countEl.textContent = `${allFiles.length} files`;
+
+    // helper to draw indent guides
+    function indentGuides(depth) {
+      if (depth === 0) return '';
+      let g = '';
+      for (let i=0;i<depth;i++) g += `<span class="indent-guide"></span>`;
+      return g;
+    }
+
     function walk(node, depth) {
       const isFolder = node.type === 'folder';
       const isExpanded = expanded.has(node.path);
       const el = document.createElement('div');
       el.className = `tree-item depth-${depth} ${isFolder ? 'is-folder' : ''} ${activePath === node.path ? 'is-active' : ''}`;
       el.setAttribute('role', 'treeitem');
+      el.setAttribute('aria-selected', activePath === node.path ? 'true' : 'false');
+      el.setAttribute('aria-expanded', isFolder ? String(isExpanded) : null);
       el.dataset.path = node.path;
       el.dataset.type = node.type;
+      el.draggable = true;
 
       let toggle = '';
       if (isFolder) toggle = `<span class="tree-toggle">${isExpanded ? '▾' : '▸'}</span>`;
       else toggle = `<span class="tree-toggle"></span>`;
 
       const icon = iconFor(node.path, isFolder, isExpanded);
-      el.innerHTML = `${toggle}<span class="file-icon">${icon}</span><span class="tree-label">${node.name || 'ubiquitous-guacamole'}</span>`;
-      if (!isFolder && openTabs.find(t => t.path === node.path)?.dirty) {
-        el.innerHTML += `<span style="margin-left:auto;font-size:10px;color:var(--fg-muted)">●</span>`;
-      }
+      const dirty = (!isFolder && openTabs.find(t => t.path === node.path)?.dirty) ? `<span style="margin-left:auto;font-size:10px;color:var(--fg-muted)" title="Unsaved">●</span>` : `<span style="margin-left:auto"></span>`;
+      // indent guides + label
+      el.innerHTML = `${indentGuides(depth)}${toggle}<span class="file-icon">${icon}</span><span class="tree-label">${node.name || 'ubiquitous-guacamole'}</span>${dirty}`;
+      // drag handlers
+      el.addEventListener('dragstart', (e)=>{ e.dataTransfer.setData('text/plain', node.path); e.dataTransfer.effectAllowed='move'; el.classList.add('is-dragging'); });
+      el.addEventListener('dragend', ()=>el.classList.remove('is-dragging'));
+      el.addEventListener('dragover', (e)=>{ e.preventDefault(); if(isFolder) el.classList.add('is-drop-target'); });
+      el.addEventListener('dragleave', ()=>el.classList.remove('is-drop-target'));
+      el.addEventListener('drop', (e)=>{
+        e.preventDefault(); el.classList.remove('is-drop-target');
+        const srcPath = e.dataTransfer.getData('text/plain');
+        if (!srcPath || srcPath===node.path) return;
+        movePath(srcPath, node.path);
+      });
+      // keyboard navigation: arrows expand/collapse, Enter open
+      el.addEventListener('keydown', (e)=>{
+        if (e.key==='ArrowRight' && isFolder && !isExpanded) { expanded.add(node.path); renderTree(); }
+        else if (e.key==='ArrowLeft' && isFolder && isExpanded) { expanded.delete(node.path); renderTree(); }
+        else if (e.key==='Enter') { if(isFolder){ if(isExpanded) expanded.delete(node.path); else expanded.add(node.path); renderTree(); } else openFile(node.path); }
+      });
+      el.tabIndex = 0;
       fileTreeEl.appendChild(el);
 
       if (isFolder && isExpanded && node.children) {
@@ -257,6 +290,7 @@ Built with ❤️ — not affiliated with Microsoft.
     for (const child of sortedRoot) walk(child, 0);
   }
 
+  // Enhanced click: folder toggle, file open, outline refresh
   fileTreeEl.addEventListener('click', (e) => {
     const item = e.target.closest('.tree-item');
     if (!item) return;
@@ -269,8 +303,95 @@ Built with ❤️ — not affiliated with Microsoft.
       renderTree();
     } else {
       openFile(path);
+      refreshOutlineAndTimeline();
     }
+    item.focus();
   });
+  // Collapse All handler
+  document.querySelector('[data-cmd="collapseAll"]')?.addEventListener('click', ()=>{
+    expanded.clear(); expanded.add(''); renderTree(); toast('All folders collapsed');
+  });
+  // Explorer section toggles (Outline/Timeline)
+  document.querySelectorAll('.section-header[data-toggle]').forEach(h=>{
+    h.addEventListener('click', ()=>{
+      const key = h.dataset.toggle;
+      const content = document.getElementById(key==='outline'?'outlineTree':'timelineList');
+      const isOpen = !content.classList.contains('hidden');
+      if (isOpen) { content.classList.add('hidden'); h.setAttribute('aria-expanded','false'); h.querySelector('.chevron').textContent='▸'; }
+      else {
+        content.classList.remove('hidden'); h.setAttribute('aria-expanded','true'); h.querySelector('.chevron').textContent='▾';
+        if (key==='outline') renderOutline();
+        if (key==='timeline') renderTimeline();
+      }
+    });
+  });
+  // Outline & Timeline renderers
+  function renderOutline() {
+    const outlineEl = document.getElementById('outlineTree');
+    if (!outlineEl || !activePath) { if(outlineEl) outlineEl.innerHTML='<div class="muted small" style="padding:6px 12px">No active file</div>'; return; }
+    const node = findNode(activePath);
+    if (!node) return;
+    const text = node.content;
+    const symbols = [];
+    const funcRe = /(?:function\s+(\w+)|const\s+(\w+)\s*=\s*\(.*\)\s*=>|class\s+(\w+)|(\w+)\s*\(.*\)\s*\{)/g;
+    let m;
+    while ((m=funcRe.exec(text))!==null) {
+      const name = m[1]||m[2]||m[3]||m[4];
+      if (name) symbols.push({name, kind: m[3]?'class': m[1]||m[4]?'function':'variable', line: text.slice(0,m.index).split('\n').length});
+    }
+    if (symbols.length===0) { outlineEl.innerHTML='<div class="muted small" style="padding:6px 12px">No symbols found</div>'; return; }
+    outlineEl.innerHTML = symbols.map(s=>`<div class="outline-item" data-line="${s.line}"><span class="sym sym-${s.kind}">${s.kind[0].toUpperCase()}</span><span>${s.name}</span><span class="muted small" style="margin-left:auto">:${s.line}</span></div>`).join('');
+    outlineEl.querySelectorAll('.outline-item').forEach(el=>el.addEventListener('click', ()=>{
+      openFile(activePath);
+      setTimeout(()=>{ if(monacoEditor) monacoEditor.revealLineInCenter(parseInt(el.dataset.line)); monacoEditor.setPosition({lineNumber:parseInt(el.dataset.line), column:1}); },100);
+    }));
+    // update header count
+    const header = document.querySelector('[data-toggle="outline"] .muted');
+    if (header) header.textContent = `${symbols.length} symbols`;
+  }
+  function renderTimeline() {
+    const tl = document.getElementById('timelineList');
+    if (!tl) return;
+    const entries = JSON.parse(localStorage.getItem('vscode-timeline')||'[]');
+    if (entries.length===0) { tl.innerHTML='<div class="muted small" style="padding:6px 12px">No local history yet — edits create timeline entries</div>'; return; }
+    tl.innerHTML = entries.slice(-10).reverse().map(e=>`<div class="timeline-item"><span>✎</span><span>${e.path.split('/').pop()}</span><span class="muted small">${e.action}</span><span class="time">${e.time}</span></div>`).join('');
+  }
+  function refreshOutlineAndTimeline(){
+    const outlineVisible = !document.getElementById('outlineTree').classList.contains('hidden');
+    if (outlineVisible) renderOutline();
+    // timeline auto-add on save/open
+    const now = new Date().toLocaleTimeString();
+    if (activePath) {
+      let tl = JSON.parse(localStorage.getItem('vscode-timeline')||'[]');
+      tl.push({path:activePath, action:'Opened', time: now});
+      if (tl.length>50) tl=tl.slice(-50);
+      localStorage.setItem('vscode-timeline', JSON.stringify(tl));
+    }
+  }
+  function movePath(srcPath, destFolderPath) {
+    const srcNode = findNode(srcPath);
+    const destNode = findNode(destFolderPath);
+    if (!srcNode || !destNode || destNode.type!=='folder') return;
+    if (srcPath===destFolderPath || destFolderPath.startsWith(srcPath+'/')) { toast('Cannot move folder into itself'); return; }
+    // remove from old parent
+    const {parent: oldParent, name} = findParent(srcPath);
+    if (!oldParent) return;
+    oldParent.children = oldParent.children.filter(c=>c.path!==srcPath);
+    // check duplicate name in dest
+    if (destNode.children.find(c=>c.name===srcNode.name)) { toast('Destination already has '+srcNode.name); oldParent.children.push(srcNode); return; }
+    // update path
+    const newPath = destFolderPath ? destFolderPath + '/' + srcNode.name : srcNode.name;
+    function updatePaths(n, base){ n.path = base ? base + '/' + n.name : n.name; if(n.children) for(const ch of n.children) updatePaths(ch, n.path); }
+    srcNode.path = newPath;
+    if (srcNode.children) for(const ch of srcNode.children) updatePaths(ch, srcNode.path);
+    destNode.children.push(srcNode);
+    expanded.add(destFolderPath);
+    saveFS(); renderTree();
+    // update tabs paths
+    openTabs.forEach(t=>{ if(t.path===srcPath) t.path=newPath; else if(t.path.startsWith(srcPath+'/')) t.path=newPath+t.path.slice(srcPath.length); });
+    if(activePath===srcPath) activePath=newPath; else if(activePath?.startsWith(srcPath+'/')) activePath=newPath+activePath.slice(srcPath.length);
+    toast(`Moved ${name} → ${destFolderPath||'root'}`);
+  }
 
   fileTreeEl.addEventListener('contextmenu', (e) => {
     e.preventDefault();
